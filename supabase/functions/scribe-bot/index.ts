@@ -1,17 +1,21 @@
-import { Bot, webhookCallback, InputFile } from 'https://deno.land/x/grammy@v1.34.0/mod.ts';
-import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { ElevenLabsClient } from 'npm:elevenlabs@1.50.5';
+import {
+  Bot,
+  InputFile,
+  webhookCallback,
+} from "https://deno.land/x/grammy@v1.34.0/mod.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@^2";
+import { ElevenLabsClient } from "npm:elevenlabs@1.59.0";
 
 console.log(`Function "elevenlabs-scribe-bot" up and running!`);
 
 const elevenlabs = new ElevenLabsClient({
-  apiKey: Deno.env.get('ELEVENLABS_API_KEY') || '',
+  apiKey: Deno.env.get("ELEVENLABS_API_KEY") || "",
 });
 
 const supabase = createClient(
-  Deno.env.get('SUPABASE_URL') || '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  Deno.env.get("SUPABASE_URL") || "",
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
 );
 
 async function scribe({
@@ -33,17 +37,20 @@ async function scribe({
   let languageCode: string | null = null;
   let errorMsg: string | null = null;
   try {
-    const sourceFileArrayBuffer = await fetch(fileURL).then((res) => res.arrayBuffer());
+    const sourceFileArrayBuffer = await fetch(fileURL).then((res) =>
+      res.arrayBuffer()
+    );
     const sourceBlob = new Blob([sourceFileArrayBuffer], {
       type: fileType,
     });
 
     const scribeResult = await elevenlabs.speechToText.convert({
       file: sourceBlob,
-      model_id: 'scribe_v1', // 'scribe_v1_experimental' is also available for new, experimental features
+      model_id: "scribe_v1", // 'scribe_v1_experimental' is also available for new, experimental features
       tag_audio_events: true,
       diarize: true,
-    },{ timeoutInSeconds: 120 });
+      language_code: "ja",
+    }, { timeoutInSeconds: 120 });
 
     transcript = scribeResult.text;
     languageCode = scribeResult.language_code;
@@ -51,26 +58,34 @@ async function scribe({
     // Check if transcript exists before creating file
     if (transcript) {
       // Create a Blob and convert it to InputFile for Telegram API
-      const textBlob = new Blob([transcript], { type: 'text/plain' });
-      const inputFile = new InputFile(textBlob, 'transcript.txt');
+      const textBlob = new Blob([transcript], { type: "text/plain" });
+      const inputFile = new InputFile(textBlob, "transcript.txt");
 
       // Reply to the user with the transcript as a text file
       await bot.api.sendDocument(chatId, inputFile, {
         reply_parameters: { message_id: messageId },
-        caption: '文字起こしが完了しました！📝',
+        caption: "文字起こしが完了しました！📝",
       });
     } else {
       // Fallback to error message if transcript is empty
-      await bot.api.sendMessage(chatId, 'Sorry, no transcript was generated. Please try again.', {
-        reply_parameters: { message_id: messageId },
-      });
+      await bot.api.sendMessage(
+        chatId,
+        "Sorry, no transcript was generated. Please try again.",
+        {
+          reply_parameters: { message_id: messageId },
+        },
+      );
     }
   } catch (error) {
     errorMsg = error.message;
     console.log(errorMsg);
-    await bot.api.sendMessage(chatId, 'Sorry, there was an error. Please try again.', {
-      reply_parameters: { message_id: messageId },
-    });
+    await bot.api.sendMessage(
+      chatId,
+      "Sorry, there was an error. Please try again.",
+      {
+        reply_parameters: { message_id: messageId },
+      },
+    );
   }
   // Write log to Supabase.
   const logLine = {
@@ -83,25 +98,33 @@ async function scribe({
     error: errorMsg,
   };
   console.log({ logLine });
-  await supabase.from('transcription_logs').insert({ ...logLine, transcript });
+  await supabase.from("transcription_logs").insert({ ...logLine, transcript });
 }
 
-const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
-const bot = new Bot(telegramBotToken || '');
-const startMessage = `Welcome to the ElevenLabs Scribe Bot\\! I can transcribe speech in 99 languages with super high accuracy\\!
+const telegramBotToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
+const bot = new Bot(telegramBotToken || "");
+const startMessage =
+  `Welcome to the ElevenLabs Scribe Bot\\! I can transcribe speech in 99 languages with super high accuracy\\!
     \nTry it out by sending or forwarding me a voice message, video, or audio file\\!
     \n[Learn more about Scribe](https://elevenlabs.io/speech-to-text) or [build your own bot](https://elevenlabs.io/docs/cookbooks/speech-to-text/telegram-bot)\\!
   `;
-bot.command('start', (ctx) => ctx.reply(startMessage.trim(), { parse_mode: 'MarkdownV2' }));
+bot.command(
+  "start",
+  (ctx) => ctx.reply(startMessage.trim(), { parse_mode: "MarkdownV2" }),
+);
 
-bot.on([':voice', ':audio', ':video'], async (ctx) => {
+bot.on([":voice", ":audio", ":video"], async (ctx) => {
   try {
     const file = await ctx.getFile();
-    const fileURL = `https://api.telegram.org/file/bot${telegramBotToken}/${file.file_path}`;
-    const fileMeta = ctx.message?.video ?? ctx.message?.voice ?? ctx.message?.audio;
+    const fileURL =
+      `https://api.telegram.org/file/bot${telegramBotToken}/${file.file_path}`;
+    const fileMeta = ctx.message?.video ?? ctx.message?.voice ??
+      ctx.message?.audio;
 
     if (!fileMeta) {
-      return ctx.reply('No video|audio|voice metadata found. Please try again.');
+      return ctx.reply(
+        "No video|audio|voice metadata found. Please try again.",
+      );
     }
 
     // Run the transcription in the background.
@@ -112,27 +135,27 @@ bot.on([':voice', ':audio', ':video'], async (ctx) => {
         duration: fileMeta.duration,
         chatId: ctx.chat.id,
         messageId: ctx.message?.message_id!,
-        username: ctx.from?.username || '',
-      })
+        username: ctx.from?.username || "",
+      }),
     );
 
     // Reply to the user immediately to let them know we received their file.
-    return ctx.reply('Received. Scribing...');
+    return ctx.reply("Received. Scribing...");
   } catch (error) {
     console.error(error);
     return ctx.reply(
-      'Sorry, there was an error getting the file. Please try again with a smaller file!'
+      "Sorry, there was an error getting the file. Please try again with a smaller file!",
     );
   }
 });
 
-const handleUpdate = webhookCallback(bot, 'std/http');
+const handleUpdate = webhookCallback(bot, "std/http");
 
 Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
-    if (url.searchParams.get('secret') !== Deno.env.get('FUNCTION_SECRET')) {
-      return new Response('not allowed', { status: 405 });
+    if (url.searchParams.get("secret") !== Deno.env.get("FUNCTION_SECRET")) {
+      return new Response("not allowed", { status: 405 });
     }
 
     return await handleUpdate(req);
