@@ -18,6 +18,84 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
 );
 
+// A single word item returned by Scribe.
+interface WordItem {
+  text: string;
+  start: number;
+  end?: number;
+  speaker_id?: string | number;
+}
+
+// Grouped utterance by a single speaker.
+interface SpeakerUtterance {
+  speaker: string | number;
+  text: string;
+  start: number;
+}
+
+// Format seconds -> m:ss or h:mm:ss.
+const formatTimestamp = (seconds: number): string => {
+  const total = Math.max(0, Math.floor(seconds));
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, "0")}:${
+      secs.toString().padStart(2, "0")
+    }`;
+  }
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
+/**
+ * 会話を話者ごとにグループ化する
+ * @param words 単語リスト
+ * @returns 話者ごとにグループ化された発言リスト
+ */
+const groupBySpeaker = (words: WordItem[]): SpeakerUtterance[] => {
+  const conversation: SpeakerUtterance[] = [];
+  let currentSpeaker: string | number | null = null;
+  let currentText = "";
+  let currentStart = 0;
+
+  for (const word of words) {
+    // speaker_idがない場合も処理する
+    const speakerId = word.speaker_id ?? "unknown_speaker";
+
+    if (currentSpeaker === null) {
+      // 最初の単語
+      currentSpeaker = speakerId;
+      currentText = word.text;
+      currentStart = word.start;
+    } else if (currentSpeaker === speakerId) {
+      // 同じ話者が続く場合
+      currentText += word.text;
+    } else {
+      // 話者が変わった場合
+      conversation.push({
+        speaker: currentSpeaker,
+        text: currentText,
+        start: currentStart,
+      });
+
+      currentSpeaker = speakerId;
+      currentText = word.text;
+      currentStart = word.start;
+    }
+  }
+
+  // 最後の話者の発言を追加
+  if (currentText && currentSpeaker !== null) {
+    conversation.push({
+      speaker: currentSpeaker,
+      text: currentText,
+      start: currentStart,
+    });
+  }
+
+  return conversation;
+};
+
 async function scribe({
   fileURL,
   fileType,
@@ -44,16 +122,39 @@ async function scribe({
       type: fileType,
     });
 
+    const shouldDiarize = true; // toggle here if you want diarization
+
     const scribeResult = await elevenlabs.speechToText.convert({
       file: sourceBlob,
       model_id: "scribe_v1", // 'scribe_v1_experimental' is also available for new, experimental features
       tag_audio_events: true,
-      diarize: true,
+      diarize: shouldDiarize,
       language_code: "ja",
     }, { timeoutInSeconds: 120 });
 
-    transcript = scribeResult.text;
-    languageCode = scribeResult.language_code;
+    // If diarization data is available, format transcript per speaker; otherwise fallback to plain text.
+    const words: WordItem[] | undefined = (scribeResult as any).words;
+
+    if (shouldDiarize && Array.isArray(words) && words.length > 0) {
+      const grouped = groupBySpeaker(words);
+      transcript = grouped
+        .map((u) => {
+          const speakerLabel = typeof u.speaker === "number"
+            ? `speaker_${u.speaker}`
+            : `${u.speaker}`;
+          return `[${
+            formatTimestamp(u.start)
+          }] ${speakerLabel}: ${u.text.trim()}`;
+        })
+        .join("\n");
+    } else {
+      // ===== No diarization: plain text with basic sentence breaks, no timestamps =====
+      const plain = (scribeResult.text || "").trim();
+      // Insert newline after punctuation commonly used as sentence boundaries.
+      transcript = plain.replace(/([。.!！?？])\s*/g, "$1\n").trim();
+    }
+
+    languageCode = (scribeResult as any).language_code;
 
     // Check if transcript exists before creating file
     if (transcript) {
