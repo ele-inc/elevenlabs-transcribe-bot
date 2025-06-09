@@ -159,8 +159,13 @@ async function scribe({
     // Check if transcript exists before creating file
     if (transcript) {
       // Create a Blob and convert it to InputFile for Telegram API
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "")
+        .replace("T", "_")
+        .slice(0, 15);
       const textBlob = new Blob([transcript], { type: "text/plain" });
-      const inputFile = new InputFile(textBlob, "transcript.txt");
+      const inputFile = new InputFile(textBlob, `transcript_${timestamp}.txt`);
 
       // Reply to the user with the transcript as a text file
       await bot.api.sendDocument(chatId, inputFile, {
