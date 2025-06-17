@@ -1,8 +1,6 @@
-# ElevenLabs Scribe Bot for Telegram
+# ElevenLabs Scribe Bot for Slack
 
-This is a Telegram bot that uses the [ElevenLabs Scribe API](https://elevenlabs.io/speech-to-text) to transcribe audio and video files sent by users. It's built with Deno and runs on Supabase Edge Functions.
-
-https://elevenlabs.io/docs/cookbooks/speech-to-text/telegram-bot
+This is a Slack bot that uses the [ElevenLabs Scribe API](https://elevenlabs.io/speech-to-text) to transcribe audio and video files uploaded by users. It's built with Deno and runs on Supabase Edge Functions.
 
 ## Features
 
@@ -15,7 +13,7 @@ https://elevenlabs.io/docs/cookbooks/speech-to-text/telegram-bot
 
 - [Deno](https://deno.land/)
 - [Supabase](https://supabase.com/) (Edge Functions, Database)
-- [Grammy](https://grammy.dev/) (Telegram Bot Framework)
+- [Slack Bolt for Deno](https://deno.land/x/slack_bolt) (Slack Bot Framework)
 - [ElevenLabs API](https://elevenlabs.io/docs/api-reference/speech-to-text)
 
 ## Setup
@@ -26,7 +24,7 @@ https://elevenlabs.io/docs/cookbooks/speech-to-text/telegram-bot
 - [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started) installed
 - An ElevenLabs account and API key.
 - A Supabase project.
-- A Telegram bot token.
+- A Slack app with bot token and signing secret.
 
 ### 1. Clone the repository
 
@@ -50,7 +48,8 @@ Create a `.env` file in the `supabase/functions/scribe-bot/` directory and add t
 
 ```
 ELEVENLABS_API_KEY="your-elevenlabs-api-key"
-TELEGRAM_BOT_TOKEN="your-telegram-bot-token"
+SLACK_BOT_TOKEN="your-slack-bot-token"
+SLACK_SIGNING_SECRET="your-slack-signing-secret"
 SUPABASE_URL="your-supabase-url"
 SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
 FUNCTION_SECRET="a-strong-secret-of-your-choice"
@@ -68,9 +67,9 @@ CREATE TABLE transcription_logs (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   file_type TEXT,
   duration INT,
-  chat_id BIGINT,
-  message_id BIGINT,
-  username TEXT,
+  channel_id TEXT,
+  message_ts TEXT,
+  user_id TEXT,
   language_code TEXT,
   transcript TEXT,
   error TEXT
@@ -85,16 +84,23 @@ Deploy the Supabase Edge Function:
 make deploy
 ```
 
-### 6. Set the Telegram webhook
+### 6. Set up the Slack App
 
-Finally, set the webhook for your Telegram bot to point to your new Supabase Function URL.
-
-You can do this by sending a GET request to the Telegram Bot API:
-
-```
-https://api.telegram.org/bot<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook?url=<YOUR_SUPABASE_FUNCTION_URL>?secret=<YOUR_FUNCTION_SECRET>
-```
-
-Replace `<YOUR_TELEGRAM_BOT_TOKEN>`, `<YOUR_SUPABASE_FUNCTION_URL>`, and `<YOUR_FUNCTION_SECRET>` with your actual values.
+1. Create a new Slack app at https://api.slack.com/apps
+2. Go to "OAuth & Permissions" and add the following bot token scopes:
+   - `files:read` - To read file information
+   - `files:write` - To upload transcript files
+   - `chat:write` - To send messages
+3. Install the app to your workspace and copy the Bot User OAuth Token
+4. Go to "Event Subscriptions" and enable events
+5. Set the Request URL to your Supabase Function URL with the secret parameter:
+   ```
+   <YOUR_SUPABASE_FUNCTION_URL>?secret=<YOUR_FUNCTION_SECRET>
+   ```
+6. Subscribe to the following bot events:
+   - `file_shared` - To detect when files are uploaded
+   - `app_mention` - To detect when the bot is mentioned with files
+   - `message.channels` - To respond to messages (optional, for hello command)
+7. Go to "Basic Information" and copy the Signing Secret
 
 The function URL can be found in the output of the `supabase functions deploy` command or in your Supabase project dashboard.

@@ -1,8 +1,3 @@
-import {
-  Bot,
-  InputFile,
-  webhookCallback,
-} from "https://deno.land/x/grammy@v1.34.0/mod.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@^2";
 import { ElevenLabsClient } from "npm:elevenlabs@1.59.0";
@@ -96,41 +91,126 @@ const groupBySpeaker = (words: WordItem[]): SpeakerUtterance[] => {
   return conversation;
 };
 
+// Send message to Slack
+async function sendSlackMessage(
+  channel: string,
+  text: string,
+  threadTs?: string,
+) {
+  const response = await fetch("https://slack.com/api/chat.postMessage", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${Deno.env.get("SLACK_BOT_TOKEN")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      channel,
+      text,
+      thread_ts: threadTs,
+    }),
+  });
+
+  return await response.json();
+}
+
 async function scribe({
   fileURL,
   fileType,
   duration,
-  chatId,
-  messageId,
-  username,
+  channelId,
+  timestamp,
+  userId,
 }: {
   fileURL: string;
   fileType: string;
   duration: number;
-  chatId: number;
-  messageId: number;
-  username: string;
+  channelId: string;
+  timestamp: string;
+  userId: string;
 }) {
   let transcript: string | null = null;
   let languageCode: string | null = null;
   let errorMsg: string | null = null;
+  let tempFilePath: string | null = null;
+
+  console.log("fileURL", fileURL, "scribe called");
+  console.log("fileType (MIME):", fileType);
   try {
-    const sourceFileArrayBuffer = await fetch(fileURL).then((res) =>
-      res.arrayBuffer()
-    );
-    const sourceBlob = new Blob([sourceFileArrayBuffer], {
-      type: fileType,
+    console.log("fetching file");
+    const response = await fetch(fileURL, {
+      headers: {
+        "Authorization": `Bearer ${Deno.env.get("SLACK_BOT_TOKEN")}`,
+      },
     });
+
+    console.log("Response status:", response.status);
+    console.log("Response content-type:", response.headers.get("content-type"));
+
+    // Debug: Check if response is HTML error page
+    if (response.headers.get("content-type")?.includes("text/html")) {
+      const htmlContent = await response.text();
+      console.log(
+        "HTML Response (first 500 chars):",
+        htmlContent.substring(0, 500),
+      );
+      throw new Error(
+        "Received HTML instead of audio file - likely authentication error",
+      );
+    }
+
+    const sourceFileArrayBuffer = await response.arrayBuffer();
+    console.log("File size:", sourceFileArrayBuffer.byteLength, "bytes");
+
+    // Create temporary file with proper extension mapping
+    const tempDir = await Deno.makeTempDir();
+    const getFileExtension = (mimeType: string): string => {
+      const mimeToExt: { [key: string]: string } = {
+        "audio/mpeg": "mp3",
+        "audio/mp3": "mp3",
+        "audio/wav": "wav",
+        "audio/wave": "wav",
+        "audio/x-wav": "wav",
+        "audio/mp4": "m4a",
+        "audio/aac": "aac",
+        "audio/ogg": "ogg",
+        "audio/webm": "webm",
+        "video/mp4": "mp4",
+        "video/mpeg": "mpg",
+        "video/quicktime": "mov",
+        "video/x-msvideo": "avi",
+        "video/webm": "webm",
+      };
+      return mimeToExt[mimeType] || mimeType.split("/")[1] || "bin";
+    };
+
+    const fileExtension = getFileExtension(fileType);
+    tempFilePath = `${tempDir}/audio_${Date.now()}.${fileExtension}`;
+
+    console.log("saving to temp file:", tempFilePath);
+    await Deno.writeFile(tempFilePath, new Uint8Array(sourceFileArrayBuffer));
 
     const shouldDiarize = true; // toggle here if you want diarization
 
+    console.log("calling elevenlabs");
+
+    // Create file from temp path for ElevenLabs API
+    const fileHandle = await Deno.open(tempFilePath, { read: true });
+    const fileBlob = new Blob([await Deno.readFile(tempFilePath)], {
+      type: fileType,
+    });
+    fileHandle.close();
+
+    console.log("Sending to ElevenLabs API...");
     const scribeResult = await elevenlabs.speechToText.convert({
-      file: sourceBlob,
+      file: fileBlob,
       model_id: "scribe_v1", // 'scribe_v1_experimental' is also available for new, experimental features
       tag_audio_events: true,
       diarize: shouldDiarize,
       language_code: "ja",
     }, { timeoutInSeconds: 120 });
+
+    console.log("ElevenLabs API response received");
+    console.log("Scribe result:", JSON.stringify(scribeResult, null, 2));
 
     // If diarization data is available, format transcript per speaker; otherwise fallback to plain text.
     const words: WordItem[] | undefined = (scribeResult as any).words;
@@ -156,116 +236,274 @@ async function scribe({
 
     languageCode = (scribeResult as any).language_code;
 
+    console.log("Generated transcript:", transcript);
+    console.log("Language code:", languageCode);
+
     // Check if transcript exists before creating file
     if (transcript) {
-      // Create a Blob and convert it to InputFile for Telegram API
-      const timestamp = new Date()
+      console.log("Uploading transcript to Slack...");
+
+      // Create a text file with timestamp
+      const fileTimestamp = new Date()
         .toISOString()
         .replace(/[:.]/g, "")
         .replace("T", "_")
         .slice(0, 15);
-      const textBlob = new Blob([transcript], { type: "text/plain" });
-      const inputFile = new InputFile(textBlob, `transcript_${timestamp}.txt`);
+      const filename = `transcript_${fileTimestamp}.txt`;
 
-      // Reply to the user with the transcript as a text file
-      await bot.api.sendDocument(chatId, inputFile, {
-        reply_parameters: { message_id: messageId },
-        caption: "文字起こしが完了しました！📝",
-      });
-    } else {
-      // Fallback to error message if transcript is empty
-      await bot.api.sendMessage(
-        chatId,
-        "Sorry, no transcript was generated. Please try again.",
+      // Use new Slack Files API v2 with proper form-data
+      console.log("Using Slack Files API v2");
+
+      const fileBytes = new TextEncoder().encode(transcript);
+      console.log("File size:", fileBytes.length, "bytes");
+
+      // Step 1: Get upload URL with form-data
+      const formData1 = new FormData();
+      formData1.append("filename", filename);
+      formData1.append("length", fileBytes.length.toString());
+
+      const uploadUrlResponse = await fetch(
+        "https://slack.com/api/files.getUploadURLExternal",
         {
-          reply_parameters: { message_id: messageId },
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${Deno.env.get("SLACK_BOT_TOKEN")}`,
+          },
+          body: formData1,
         },
+      );
+
+      const uploadUrlResult = await uploadUrlResponse.json();
+      console.log(
+        "Upload URL response:",
+        JSON.stringify(uploadUrlResult, null, 2),
+      );
+
+      if (!uploadUrlResult.ok) {
+        throw new Error(`Failed to get upload URL: ${uploadUrlResult.error}`);
+      }
+
+      // Step 2: Upload file to the pre-signed URL
+      const fileUploadResponse = await fetch(uploadUrlResult.upload_url, {
+        method: "POST",
+        body: fileBytes,
+      });
+
+      if (!fileUploadResponse.ok) {
+        throw new Error(
+          `Failed to upload file: ${fileUploadResponse.statusText}`,
+        );
+      }
+
+      // Step 3: Complete the upload with form-data
+      const formData2 = new FormData();
+      formData2.append(
+        "files",
+        JSON.stringify([{
+          id: uploadUrlResult.file_id,
+          title: filename,
+        }]),
+      );
+      formData2.append("channel_id", channelId);
+      formData2.append("initial_comment", "文字起こしが完了しました！📝");
+      formData2.append("thread_ts", timestamp);
+
+      const completeResponse = await fetch(
+        "https://slack.com/api/files.completeUploadExternal",
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${Deno.env.get("SLACK_BOT_TOKEN")}`,
+          },
+          body: formData2,
+        },
+      );
+
+      const completeResult = await completeResponse.json();
+      console.log(
+        "Complete upload response:",
+        JSON.stringify(completeResult, null, 2),
+      );
+
+      if (!completeResult.ok) {
+        throw new Error(`Failed to complete upload: ${completeResult.error}`);
+      }
+
+      console.log("Transcript successfully uploaded to Slack");
+    } else {
+      console.log("No transcript generated, sending error message");
+      // Fallback to error message if transcript is empty
+      await sendSlackMessage(
+        channelId,
+        "Sorry, no transcript was generated. Please try again.",
+        timestamp,
       );
     }
   } catch (error) {
     errorMsg = error.message;
-    console.log(errorMsg);
-    await bot.api.sendMessage(
-      chatId,
+    await sendSlackMessage(
+      channelId,
       "Sorry, there was an error. Please try again.",
-      {
-        reply_parameters: { message_id: messageId },
-      },
+      timestamp,
     );
+  } finally {
+    // Clean up temporary file
+    if (tempFilePath) {
+      try {
+        console.log("cleaning up temp file:", tempFilePath);
+        await Deno.remove(tempFilePath);
+        // Also try to remove the temp directory if it's empty
+        const tempDir = tempFilePath.substring(
+          0,
+          tempFilePath.lastIndexOf("/"),
+        );
+        try {
+          await Deno.remove(tempDir);
+        } catch {
+          // Ignore error if directory is not empty or doesn't exist
+        }
+      } catch (cleanupError) {
+        console.log("Error cleaning up temp file:", cleanupError.message);
+      }
+    }
   }
+
   // Write log to Supabase.
   const logLine = {
     file_type: fileType,
     duration,
-    chat_id: chatId,
-    message_id: messageId,
-    username,
+    channel_id: channelId,
+    message_ts: timestamp,
+    user_id: userId,
     language_code: languageCode,
     error: errorMsg,
   };
-  console.log({ logLine });
   await supabase.from("transcription_logs").insert({ ...logLine, transcript });
 }
 
-const telegramBotToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
-const bot = new Bot(telegramBotToken || "");
-const startMessage =
-  `Welcome to the ElevenLabs Scribe Bot\\! I can transcribe speech in 99 languages with super high accuracy\\!
-    \nTry it out by sending or forwarding me a voice message, video, or audio file\\!
-    \n[Learn more about Scribe](https://elevenlabs.io/speech-to-text) or [build your own bot](https://elevenlabs.io/docs/cookbooks/speech-to-text/telegram-bot)\\!
-  `;
-bot.command(
-  "start",
-  (ctx) => ctx.reply(startMessage.trim(), { parse_mode: "MarkdownV2" }),
-);
+// Handle hello message
+async function handleMessage(event: any) {
+  if (event.text?.toLowerCase().includes("hello")) {
+    const startMessage =
+      `Welcome to the ElevenLabs Scribe Bot! I can transcribe speech in 99 languages with super high accuracy!
+Try it out by uploading a voice message, video, or audio file!
+[Learn more about Scribe](https://elevenlabs.io/speech-to-text)!`;
 
-bot.on([":voice", ":audio", ":video"], async (ctx) => {
+    await sendSlackMessage(event.channel, startMessage);
+  }
+}
+
+// Set to track processed events
+const processedEvents = new Set<string>();
+
+// Handle app mention with files
+async function handleAppMention(event: any) {
+  // Create unique event ID to prevent duplicates
+  const eventId = `${event.channel}_${event.ts}_${event.user}`;
+
+  if (processedEvents.has(eventId)) {
+    console.log("Duplicate event detected, skipping:", eventId);
+    return;
+  }
+
+  processedEvents.add(eventId);
+  console.log("Processing new event:", eventId);
+
   try {
-    const file = await ctx.getFile();
-    const fileURL =
-      `https://api.telegram.org/file/bot${telegramBotToken}/${file.file_path}`;
-    const fileMeta = ctx.message?.video ?? ctx.message?.voice ??
-      ctx.message?.audio;
-
-    if (!fileMeta) {
-      return ctx.reply(
-        "No video|audio|voice metadata found. Please try again.",
+    // Check if the mention includes files
+    if (!event.files || event.files.length === 0) {
+      return await sendSlackMessage(
+        event.channel,
+        "Please upload an audio or video file with your mention for transcription.",
+        event.ts,
       );
     }
 
-    // Run the transcription in the background.
-    EdgeRuntime.waitUntil(
-      scribe({
-        fileURL,
-        fileType: fileMeta.mime_type!,
-        duration: fileMeta.duration,
-        chatId: ctx.chat.id,
-        messageId: ctx.message?.message_id!,
-        username: ctx.from?.username || "",
-      }),
-    );
+    // Process each file
+    for (const file of event.files) {
+      // Check if file is audio/video
+      if (
+        !file.mimetype?.startsWith("audio/") &&
+        !file.mimetype?.startsWith("video/")
+      ) {
+        await sendSlackMessage(
+          event.channel,
+          `File "${file.name}" is not an audio or video file. Please upload an audio or video file for transcription.`,
+          event.ts,
+        );
+        continue;
+      }
 
-    // Reply to the user immediately to let them know we received their file.
-    return ctx.reply("Received. Scribing...");
+      // Get file download URL
+      const fileURL = file.url_private_download || file.url_private;
+
+      if (!fileURL) {
+        await sendSlackMessage(
+          event.channel,
+          `Could not access file "${file.name}". Please try uploading again.`,
+          event.ts,
+        );
+        continue;
+      }
+
+      // Run the transcription in the background
+      EdgeRuntime.waitUntil(
+        scribe({
+          fileURL,
+          fileType: file.mimetype,
+          duration: file.duration || 0,
+          channelId: event.channel,
+          timestamp: event.ts,
+          userId: event.user,
+        }),
+      );
+
+      // Reply to the user immediately
+      await sendSlackMessage(
+        event.channel,
+        `Received "${file.name}". Scribing...`,
+        event.ts,
+      );
+    }
   } catch (error) {
     console.error(error);
-    return ctx.reply(
-      "Sorry, there was an error getting the file. Please try again with a smaller file!",
+    return await sendSlackMessage(
+      event.channel,
+      "Sorry, there was an error processing your files. Please try again!",
+      event.ts,
     );
   }
-});
-
-const handleUpdate = webhookCallback(bot, "std/http");
+}
 
 Deno.serve(async (req) => {
   try {
-    const url = new URL(req.url);
-    if (url.searchParams.get("secret") !== Deno.env.get("FUNCTION_SECRET")) {
-      return new Response("not allowed", { status: 405 });
+    if (req.method === "POST") {
+      const bodyText = await req.text();
+      const body = JSON.parse(bodyText);
+
+      // Handle Slack URL verification challenge
+      if (body.type === "url_verification") {
+        return new Response(body.challenge, {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+
+      // Handle Slack events
+      if (body.type === "event_callback") {
+        const event = body.event;
+
+        if (event.type !== "app_mention") {
+          return new Response("OK", { status: 200 });
+        }
+        await EdgeRuntime.waitUntil(handleAppMention(event));
+        return new Response("OK", { status: 200 });
+      }
     }
 
-    return await handleUpdate(req);
+    return new Response("Method not allowed", { status: 405 });
   } catch (err) {
     console.error(err);
+    return new Response("Internal Server Error", { status: 500 });
   }
 });
