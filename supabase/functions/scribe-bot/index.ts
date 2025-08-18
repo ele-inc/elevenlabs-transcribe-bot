@@ -4,13 +4,23 @@ import { ElevenLabsClient } from "npm:elevenlabs@1.59.0";
 
 console.log(`Function "elevenlabs-scribe-bot" up and running!`);
 
+// Environment variables validation
+const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN");
+
+if (!ELEVENLABS_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SLACK_BOT_TOKEN) {
+  throw new Error("Missing required environment variables");
+}
+
 const elevenlabs = new ElevenLabsClient({
-  apiKey: Deno.env.get("ELEVENLABS_API_KEY") || "",
+  apiKey: ELEVENLABS_API_KEY,
 });
 
 const supabase = createClient(
-  Deno.env.get("SUPABASE_URL") || "",
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
 );
 
 // A single word item returned by Scribe.
@@ -27,6 +37,45 @@ interface SpeakerUtterance {
   text: string;
   start: number;
 }
+
+// Slack event types
+interface SlackFile {
+  name: string;
+  mimetype?: string;
+  url_private?: string;
+  url_private_download?: string;
+  duration?: number;
+}
+
+interface SlackEvent {
+  type: string;
+  channel: string;
+  user: string;
+  text?: string;
+  ts: string;
+  files?: SlackFile[];
+}
+
+// Helper to get file extension from MIME type
+const getFileExtensionFromMime = (mimeType: string): string => {
+  const mimeToExt: Record<string, string> = {
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/wav": "wav",
+    "audio/wave": "wav",
+    "audio/x-wav": "wav",
+    "audio/mp4": "m4a",
+    "audio/aac": "aac",
+    "audio/ogg": "ogg",
+    "audio/webm": "webm",
+    "video/mp4": "mp4",
+    "video/mpeg": "mpg",
+    "video/quicktime": "mov",
+    "video/x-msvideo": "avi",
+    "video/webm": "webm",
+  };
+  return mimeToExt[mimeType] || mimeType.split("/")[1] || "bin";
+};
 
 // Format seconds -> m:ss or h:mm:ss.
 const formatTimestamp = (seconds: number): string => {
@@ -100,7 +149,7 @@ async function sendSlackMessage(
   const response = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${Deno.env.get("SLACK_BOT_TOKEN")}`,
+      "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -139,7 +188,7 @@ async function scribe({
     console.log("fetching file");
     const response = await fetch(fileURL, {
       headers: {
-        "Authorization": `Bearer ${Deno.env.get("SLACK_BOT_TOKEN")}`,
+        "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
       },
     });
 
@@ -163,27 +212,7 @@ async function scribe({
 
     // Create temporary file with proper extension mapping
     const tempDir = await Deno.makeTempDir();
-    const getFileExtension = (mimeType: string): string => {
-      const mimeToExt: { [key: string]: string } = {
-        "audio/mpeg": "mp3",
-        "audio/mp3": "mp3",
-        "audio/wav": "wav",
-        "audio/wave": "wav",
-        "audio/x-wav": "wav",
-        "audio/mp4": "m4a",
-        "audio/aac": "aac",
-        "audio/ogg": "ogg",
-        "audio/webm": "webm",
-        "video/mp4": "mp4",
-        "video/mpeg": "mpg",
-        "video/quicktime": "mov",
-        "video/x-msvideo": "avi",
-        "video/webm": "webm",
-      };
-      return mimeToExt[mimeType] || mimeType.split("/")[1] || "bin";
-    };
-
-    const fileExtension = getFileExtension(fileType);
+    const fileExtension = getFileExtensionFromMime(fileType);
     tempFilePath = `${tempDir}/audio_${Date.now()}.${fileExtension}`;
 
     console.log("saving to temp file:", tempFilePath);
@@ -213,7 +242,7 @@ async function scribe({
     console.log("Scribe result:", JSON.stringify(scribeResult, null, 2));
 
     // If diarization data is available, format transcript per speaker; otherwise fallback to plain text.
-    const words: WordItem[] | undefined = (scribeResult as any).words;
+    const words: WordItem[] | undefined = (scribeResult as { words?: WordItem[] }).words;
 
     if (shouldDiarize && Array.isArray(words) && words.length > 0) {
       const grouped = groupBySpeaker(words);
@@ -234,7 +263,7 @@ async function scribe({
       transcript = plain.replace(/([。.!！?？])\s*/g, "$1\n").trim();
     }
 
-    languageCode = (scribeResult as any).language_code;
+    languageCode = (scribeResult as { language_code?: string }).language_code || null;
 
     console.log("Generated transcript:", transcript);
     console.log("Language code:", languageCode);
@@ -267,7 +296,7 @@ async function scribe({
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${Deno.env.get("SLACK_BOT_TOKEN")}`,
+            "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
           },
           body: formData1,
         },
@@ -313,7 +342,7 @@ async function scribe({
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${Deno.env.get("SLACK_BOT_TOKEN")}`,
+            "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
           },
           body: formData2,
         },
@@ -340,7 +369,7 @@ async function scribe({
       );
     }
   } catch (error) {
-    errorMsg = error.message;
+    errorMsg = error instanceof Error ? error.message : String(error);
     await sendSlackMessage(
       channelId,
       "Sorry, there was an error. Please try again.",
@@ -363,7 +392,7 @@ async function scribe({
           // Ignore error if directory is not empty or doesn't exist
         }
       } catch (cleanupError) {
-        console.log("Error cleaning up temp file:", cleanupError.message);
+        console.log("Error cleaning up temp file:", cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
       }
     }
   }
@@ -381,23 +410,12 @@ async function scribe({
   await supabase.from("transcription_logs").insert({ ...logLine, transcript });
 }
 
-// Handle hello message
-async function handleMessage(event: any) {
-  if (event.text?.toLowerCase().includes("hello")) {
-    const startMessage =
-      `Welcome to the ElevenLabs Scribe Bot! I can transcribe speech in 99 languages with super high accuracy!
-Try it out by uploading a voice message, video, or audio file!
-[Learn more about Scribe](https://elevenlabs.io/speech-to-text)!`;
-
-    await sendSlackMessage(event.channel, startMessage);
-  }
-}
 
 // Set to track processed events
 const processedEvents = new Set<string>();
 
 // Handle app mention with files
-async function handleAppMention(event: any) {
+async function handleAppMention(event: SlackEvent) {
   // Create unique event ID to prevent duplicates
   const eventId = `${event.channel}_${event.ts}_${event.user}`;
 
@@ -419,21 +437,23 @@ async function handleAppMention(event: any) {
       );
     }
 
-    // Process each file
-    for (const file of event.files) {
-      // Check if file is audio/video
-      if (
-        !file.mimetype?.startsWith("audio/") &&
-        !file.mimetype?.startsWith("video/")
-      ) {
+    // Filter and process audio/video files
+    const audioVideoFiles = event.files.filter(file => 
+      file.mimetype?.startsWith("audio/") || file.mimetype?.startsWith("video/")
+    );
+
+    if (audioVideoFiles.length === 0) {
+      for (const file of event.files) {
         await sendSlackMessage(
           event.channel,
           `File "${file.name}" is not an audio or video file. Please upload an audio or video file for transcription.`,
           event.ts,
         );
-        continue;
       }
+      return;
+    }
 
+    for (const file of audioVideoFiles) {
       // Get file download URL
       const fileURL = file.url_private_download || file.url_private;
 
@@ -447,10 +467,10 @@ async function handleAppMention(event: any) {
       }
 
       // Run the transcription in the background
-      EdgeRuntime.waitUntil(
+      await EdgeRuntime.waitUntil(
         scribe({
           fileURL,
-          fileType: file.mimetype,
+          fileType: file.mimetype || "",
           duration: file.duration || 0,
           channelId: event.channel,
           timestamp: event.ts,
@@ -496,7 +516,7 @@ Deno.serve(async (req) => {
         if (event.type !== "app_mention") {
           return new Response("OK", { status: 200 });
         }
-        await EdgeRuntime.waitUntil(handleAppMention(event));
+        await handleAppMention(event);
         return new Response("OK", { status: 200 });
       }
     }
