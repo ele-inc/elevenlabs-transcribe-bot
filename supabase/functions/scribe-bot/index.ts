@@ -56,6 +56,22 @@ interface SlackEvent {
   files?: SlackFile[];
 }
 
+// Transcription options
+interface TranscriptionOptions {
+  diarize: boolean;
+  showTimestamp: boolean;
+  tagAudioEvents: boolean;
+}
+
+// Parse options from mention text
+const parseTranscriptionOptions = (text: string = ""): TranscriptionOptions => {
+  return {
+    diarize: !text.includes("--no-diarize"),
+    showTimestamp: !text.includes("--no-timestamp"),
+    tagAudioEvents: !text.includes("--no-audio-events"),
+  };
+};
+
 // Helper to get file extension from MIME type
 const getFileExtensionFromMime = (mimeType: string): string => {
   const mimeToExt: Record<string, string> = {
@@ -169,6 +185,7 @@ async function scribe({
   channelId,
   timestamp,
   userId,
+  options,
 }: {
   fileURL: string;
   fileType: string;
@@ -176,6 +193,7 @@ async function scribe({
   channelId: string;
   timestamp: string;
   userId: string;
+  options: TranscriptionOptions;
 }) {
   let transcript: string | null = null;
   let languageCode: string | null = null;
@@ -218,9 +236,7 @@ async function scribe({
     console.log("saving to temp file:", tempFilePath);
     await Deno.writeFile(tempFilePath, new Uint8Array(sourceFileArrayBuffer));
 
-    const shouldDiarize = true; // toggle here if you want diarization
-
-    console.log("calling elevenlabs");
+    console.log("calling elevenlabs with options:", options);
 
     // Create file from temp path for ElevenLabs API
     const fileHandle = await Deno.open(tempFilePath, { read: true });
@@ -233,8 +249,8 @@ async function scribe({
     const scribeResult = await elevenlabs.speechToText.convert({
       file: fileBlob,
       model_id: "scribe_v1", // 'scribe_v1_experimental' is also available for new, experimental features
-      tag_audio_events: true,
-      diarize: shouldDiarize,
+      tag_audio_events: options.tagAudioEvents,
+      diarize: options.diarize,
       language_code: "ja",
     }, { timeoutInSeconds: 120 });
 
@@ -244,16 +260,18 @@ async function scribe({
     // If diarization data is available, format transcript per speaker; otherwise fallback to plain text.
     const words: WordItem[] | undefined = (scribeResult as { words?: WordItem[] }).words;
 
-    if (shouldDiarize && Array.isArray(words) && words.length > 0) {
+    if (options.diarize && Array.isArray(words) && words.length > 0) {
       const grouped = groupBySpeaker(words);
       transcript = grouped
         .map((u) => {
           const speakerLabel = typeof u.speaker === "number"
             ? `speaker_${u.speaker}`
             : `${u.speaker}`;
-          return `[${
-            formatTimestamp(u.start)
-          }] ${speakerLabel}: ${u.text.trim()}`;
+          if (options.showTimestamp) {
+            return `[${formatTimestamp(u.start)}] ${speakerLabel}: ${u.text.trim()}`;
+          } else {
+            return `${speakerLabel}: ${u.text.trim()}`;
+          }
         })
         .join("\n");
     } else {
@@ -411,8 +429,9 @@ async function scribe({
 }
 
 
-// Set to track processed events
+// Set to track processed events (with size limit to prevent memory leak)
 const processedEvents = new Set<string>();
+const MAX_PROCESSED_EVENTS = 1000;
 
 // Handle app mention with files
 async function handleAppMention(event: SlackEvent) {
@@ -424,8 +443,17 @@ async function handleAppMention(event: SlackEvent) {
     return;
   }
 
+  // Add event ID and maintain size limit
   processedEvents.add(eventId);
+  if (processedEvents.size > MAX_PROCESSED_EVENTS) {
+    const firstKey = processedEvents.values().next().value;
+    if (firstKey) processedEvents.delete(firstKey);
+  }
   console.log("Processing new event:", eventId);
+  
+  // Parse transcription options from mention text
+  const options = parseTranscriptionOptions(event.text);
+  console.log("Parsed options:", options);
 
   try {
     // Check if the mention includes files
@@ -466,8 +494,24 @@ async function handleAppMention(event: SlackEvent) {
         continue;
       }
 
+      // Reply to the user immediately with option info
+      const optionInfo = [];
+      if (!options.diarize) optionInfo.push("話者識別OFF");
+      if (!options.showTimestamp) optionInfo.push("タイムスタンプOFF");
+      if (!options.tagAudioEvents) optionInfo.push("音声イベントOFF");
+      
+      const optionText = optionInfo.length > 0 
+        ? ` (${optionInfo.join(", ")})` 
+        : "";
+      
+      await sendSlackMessage(
+        event.channel,
+        `Received "${file.name}". Scribing${optionText}...`,
+        event.ts,
+      );
+
       // Run the transcription in the background
-      await EdgeRuntime.waitUntil(
+      EdgeRuntime.waitUntil(
         scribe({
           fileURL,
           fileType: file.mimetype || "",
@@ -475,14 +519,8 @@ async function handleAppMention(event: SlackEvent) {
           channelId: event.channel,
           timestamp: event.ts,
           userId: event.user,
+          options,
         }),
-      );
-
-      // Reply to the user immediately
-      await sendSlackMessage(
-        event.channel,
-        `Received "${file.name}". Scribing...`,
-        event.ts,
       );
     }
   } catch (error) {
@@ -516,7 +554,8 @@ Deno.serve(async (req) => {
         if (event.type !== "app_mention") {
           return new Response("OK", { status: 200 });
         }
-        await handleAppMention(event);
+        // Process in background to respond quickly to Slack
+        EdgeRuntime.waitUntil(handleAppMention(event));
         return new Response("OK", { status: 200 });
       }
     }
