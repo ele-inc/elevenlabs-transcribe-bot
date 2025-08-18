@@ -105,11 +105,15 @@ export async function transcribeAudioFile({
           }
         })
         .join("\n");
-    } else if (!options.diarize && Array.isArray(words) && words.length > 0 && options.showTimestamp) {
+    } else if (!options.diarize && Array.isArray(words) && words.length > 0) {
       const sentences = extractSentences(words);
       transcript = sentences
         .map((s) => {
-          return `[${formatTimestamp(s.start)}] ${s.text}`;
+          if (options.showTimestamp) {
+            return `[${formatTimestamp(s.start)}] ${s.text}`;
+          } else {
+            return s.text;
+          }
         })
         .join("\n");
     } else {

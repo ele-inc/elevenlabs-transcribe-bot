@@ -44,7 +44,7 @@ export const formatTimestamp = (seconds: number): string => {
 export const extractSentences = (words: WordItem[]): Sentence[] => {
   const sentences: Sentence[] = [];
   let currentSentence = "";
-  let currentStart = 0;
+  let currentStart: number | null = null;
 
   for (const word of words) {
     if (currentSentence === "") {
@@ -53,23 +53,28 @@ export const extractSentences = (words: WordItem[]): Sentence[] => {
 
     currentSentence += word.text;
 
-    if (/[。！？.!?]$/.test(word.text.trim())) {
-      if (currentSentence.trim() !== "") {
+    if (isSentenceEndMarker(word.text)) {
+      if (currentSentence.trim() !== "" && currentStart !== null) {
         sentences.push({
           text: currentSentence.trim(),
           start: currentStart,
         });
       }
       currentSentence = "";
+      currentStart = null;
     }
   }
 
-  if (currentSentence.trim() !== "") {
+  if (currentSentence.trim() !== "" && currentStart !== null) {
     sentences.push({ text: currentSentence.trim(), start: currentStart });
   }
 
   return sentences;
 };
+
+function isSentenceEndMarker(text: string): boolean {
+  return /^[。！？.!?]$/.test(text);
+}
 
 export const groupBySpeaker = (words: WordItem[]): SpeakerUtterance[] => {
   const conversation: SpeakerUtterance[] = [];
