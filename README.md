@@ -4,17 +4,43 @@ This is a Slack bot that uses the [ElevenLabs Scribe API](https://elevenlabs.io/
 
 ## Features
 
-- Transcribes audio, voice, and video messages.
-- Supports speaker diarization to identify different speakers.
-- Sends the transcript back to the user as a text file.
-- Logs transcription requests and results to a Supabase table.
+- Transcribes audio and video files when mentioned in Slack
+- Supports speaker diarization to identify different speakers
+- Automatic timestamp insertion for better navigation
+- Audio event detection (music, laughter, etc.)
+- Sends transcripts back as text files in the message thread
+- Logs transcription requests and results to a Supabase table
+
+## Transcription Options
+
+You can customize the transcription by adding options when mentioning the bot:
+
+- `--no-diarize` - Disable speaker identification (default: enabled)
+- `--no-timestamp` - Disable timestamps (default: enabled)
+- `--no-audio-events` - Disable audio event detection (default: enabled)
+
+Example:
+```
+@bot transcribe this file --no-timestamp --no-diarize
+```
+
+## Project Structure
+
+```
+supabase/functions/scribe-bot/
+├── index.ts          # Main entry point and Slack event handler
+├── scribe.ts         # ElevenLabs Scribe API integration
+├── slack.ts          # Slack API utilities
+├── types.ts          # TypeScript type definitions
+└── utils.ts          # Helper functions for text processing
+```
 
 ## Tech Stack
 
-- [Deno](https://deno.land/)
-- [Supabase](https://supabase.com/) (Edge Functions, Database)
-- [Slack Bolt for Deno](https://deno.land/x/slack_bolt) (Slack Bot Framework)
-- [ElevenLabs API](https://elevenlabs.io/docs/api-reference/speech-to-text)
+- [Deno](https://deno.land/) - JavaScript/TypeScript runtime
+- [Supabase](https://supabase.com/) - Edge Functions and Database
+- [ElevenLabs Scribe API](https://elevenlabs.io/docs/api-reference/speech-to-text) - Speech-to-text transcription
+- Slack Events API - Bot event handling
 
 ## Setup
 
@@ -88,19 +114,52 @@ make deploy
 
 1. Create a new Slack app at https://api.slack.com/apps
 2. Go to "OAuth & Permissions" and add the following bot token scopes:
+   - `app_mentions:read` - To detect when the bot is mentioned
    - `files:read` - To read file information
    - `files:write` - To upload transcript files
    - `chat:write` - To send messages
 3. Install the app to your workspace and copy the Bot User OAuth Token
 4. Go to "Event Subscriptions" and enable events
-5. Set the Request URL to your Supabase Function URL with the secret parameter:
+5. Set the Request URL to your Supabase Function URL:
    ```
-   <YOUR_SUPABASE_FUNCTION_URL>?secret=<YOUR_FUNCTION_SECRET>
+   <YOUR_SUPABASE_FUNCTION_URL>
    ```
 6. Subscribe to the following bot events:
-   - `file_shared` - To detect when files are uploaded
    - `app_mention` - To detect when the bot is mentioned with files
-   - `message.channels` - To respond to messages (optional, for hello command)
 7. Go to "Basic Information" and copy the Signing Secret
 
 The function URL can be found in the output of the `supabase functions deploy` command or in your Supabase project dashboard.
+
+## Usage
+
+1. Upload an audio or video file to a Slack channel
+2. Mention the bot in the same message or as a reply
+3. (Optional) Add transcription options like `--no-timestamp` or `--no-diarize`
+4. The bot will process the file and reply with a transcript text file
+
+### Supported File Formats
+
+- Audio: MP3, WAV, M4A, AAC, OGG, WebM
+- Video: MP4, MOV, AVI, MPEG, WebM
+
+### Output Format
+
+The transcript will be formatted based on your options:
+
+**With speaker diarization (default):**
+```
+[0:00] speaker_0: こんにちは、今日の会議を始めます。
+[0:05] speaker_1: よろしくお願いします。
+```
+
+**Without speaker diarization:**
+```
+[0:00] こんにちは、今日の会議を始めます。
+[0:05] よろしくお願いします。
+```
+
+**Without timestamps:**
+```
+speaker_0: こんにちは、今日の会議を始めます。
+speaker_1: よろしくお願いします。
+```
