@@ -10,6 +10,7 @@ import {
   formatTimestamp,
   extractSentences,
   groupBySpeaker,
+  createTranscriptionHeader,
 } from "./utils.ts";
 import {
   sendSlackMessage,
@@ -42,6 +43,7 @@ export async function transcribeAudioFile({
   timestamp,
   userId,
   options,
+  filename,
 }: {
   fileURL: string;
   fileType: string;
@@ -50,6 +52,7 @@ export async function transcribeAudioFile({
   timestamp: string;
   userId: string;
   options: TranscriptionOptions;
+  filename?: string;
 }) {
   let transcript: string | null = null;
   let languageCode: string | null = null;
@@ -127,7 +130,11 @@ export async function transcribeAudioFile({
     console.log("Language code:", languageCode);
 
     if (transcript) {
-      await uploadTranscriptToSlack(transcript, channelId, timestamp);
+      // Add header with filename if provided
+      const finalTranscript = filename 
+        ? createTranscriptionHeader(filename) + transcript
+        : transcript;
+      await uploadTranscriptToSlack(finalTranscript, channelId, timestamp);
     } else {
       console.log("No transcript generated, sending error message");
       await sendSlackMessage(

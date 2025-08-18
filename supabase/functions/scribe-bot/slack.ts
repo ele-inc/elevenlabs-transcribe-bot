@@ -37,7 +37,7 @@ export async function uploadTranscriptToSlack(
     .replace(/[:.]/g, "")
     .replace("T", "_")
     .slice(0, 15);
-  const filename = `transcript_${fileTimestamp}.txt`;
+  const transcriptFilename = `transcript_${fileTimestamp}.txt`;
 
   console.log("Using Slack Files API v2");
 
@@ -45,7 +45,7 @@ export async function uploadTranscriptToSlack(
   console.log("File size:", fileBytes.length, "bytes");
 
   const formData1 = new FormData();
-  formData1.append("filename", filename);
+  formData1.append("filename", transcriptFilename);
   formData1.append("length", fileBytes.length.toString());
 
   const uploadUrlResponse = await fetch(
@@ -85,7 +85,7 @@ export async function uploadTranscriptToSlack(
     "files",
     JSON.stringify([{
       id: uploadUrlResult.file_id,
-      title: filename,
+      title: transcriptFilename,
     }]),
   );
   formData2.append("channel_id", channelId);

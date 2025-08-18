@@ -76,6 +76,10 @@ function isSentenceEndMarker(text: string): boolean {
   return /^[。！？.!?]$/.test(text);
 }
 
+export const createTranscriptionHeader = (filename: string): string => {
+  return `Original filename: ${filename}\n\n# Transcription Result\n\n`;
+}
+
 export const groupBySpeaker = (words: WordItem[]): SpeakerUtterance[] => {
   const conversation: SpeakerUtterance[] = [];
   let currentSpeaker: string | number | null = null;

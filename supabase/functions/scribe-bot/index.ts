@@ -97,6 +97,7 @@ async function handleAppMention(event: SlackEvent) {
           timestamp: event.ts,
           userId: event.user,
           options,
+          filename: file.name,
         }),
       );
     }
