@@ -18,11 +18,15 @@ You can customize the transcription by adding options when mentioning the bot:
 - `--no-diarize` - Disable speaker identification (default: enabled)
 - `--no-timestamp` - Disable timestamps (default: enabled)
 - `--no-audio-events` - Disable audio event detection (default: enabled)
+- `--num-speakers N` - Specify the number of speakers (1-32, default: 2 when diarization is enabled)
 
 Example:
 ```
 @bot transcribe this file --no-timestamp --no-diarize
+@bot transcribe this file --num-speakers 3
 ```
+
+**Note:** The `--num-speakers` option only works when speaker diarization is enabled (default). If you use `--no-diarize`, the num-speakers setting will be ignored.
 
 ## Project Structure
 

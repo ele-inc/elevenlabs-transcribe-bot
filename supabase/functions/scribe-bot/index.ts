@@ -76,6 +76,9 @@ async function handleAppMention(event: SlackEvent) {
       if (!options.diarize) optionInfo.push("話者識別OFF");
       if (!options.showTimestamp) optionInfo.push("タイムスタンプOFF");
       if (!options.tagAudioEvents) optionInfo.push("音声イベントOFF");
+      if (options.diarize && options.numSpeakers && options.numSpeakers !== 2) {
+        optionInfo.push(`話者数: ${options.numSpeakers}`);
+      }
       
       const optionText = optionInfo.length > 0 
         ? ` (${optionInfo.join(", ")})` 

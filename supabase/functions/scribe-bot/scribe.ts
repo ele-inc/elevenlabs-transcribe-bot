@@ -100,6 +100,7 @@ export async function transcribeAudioFile({
       tag_audio_events: options.tagAudioEvents,
       diarize: options.diarize,
       language_code: "ja",
+      ...(options.diarize && options.numSpeakers ? { num_speakers: options.numSpeakers } : {}),
     }, { timeoutInSeconds: 180 });
 
     console.log("ElevenLabs API response received");

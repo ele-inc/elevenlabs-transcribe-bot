@@ -1,10 +1,25 @@
 import { TranscriptionOptions, WordItem, Sentence, SpeakerUtterance } from "./types.ts";
 
 export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptions => {
+  const diarize = !text.includes("--no-diarize");
+  
+  // Parse num-speakers from command, or use default of 2 when diarize is enabled
+  let numSpeakers: number | undefined;
+  if (diarize) {
+    const numSpeakersMatch = text.match(/--num-speakers\s+(\d+)/);
+    if (numSpeakersMatch) {
+      const parsed = parseInt(numSpeakersMatch[1], 10);
+      numSpeakers = (parsed >= 1 && parsed <= 32) ? parsed : 2;
+    } else {
+      numSpeakers = 2; // Default to 2 speakers when diarize is true
+    }
+  }
+  
   return {
-    diarize: !text.includes("--no-diarize"),
+    diarize,
     showTimestamp: !text.includes("--no-timestamp"),
     tagAudioEvents: !text.includes("--no-audio-events"),
+    ...(numSpeakers ? { numSpeakers } : {}),
   };
 };
 
