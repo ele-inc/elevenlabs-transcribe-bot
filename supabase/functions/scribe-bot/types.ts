@@ -37,6 +37,7 @@ export interface TranscriptionOptions {
   diarize: boolean;
   showTimestamp: boolean;
   tagAudioEvents: boolean;
+  numSpeakers?: number;
 }
 
 export interface TranscriptionLog {
