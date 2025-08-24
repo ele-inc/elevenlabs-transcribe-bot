@@ -27,7 +27,7 @@ async function handleAppMention(event: SlackEvent) {
     if (firstKey) processedEvents.delete(firstKey);
   }
   console.log("Processing new event:", eventId);
-  
+
   // Parse transcription options from mention text
   const options = parseTranscriptionOptions(event.text);
   console.log("Parsed options:", options);
@@ -35,15 +35,25 @@ async function handleAppMention(event: SlackEvent) {
   try {
     // Check if the mention includes files
     if (!event.files || event.files.length === 0) {
+      const usageMessage = `📝 *使い方*\n\n` +
+        `音声または動画ファイルをアップロードしてメンションしてください。\n\n` +
+        `*オプション:*\n` +
+        `• \`--no-diarize\`: 話者識別を無効化\n` +
+        `• \`--no-timestamp\`: タイムスタンプを非表示\n` +
+        `• \`--no-audio-events\`: 音声イベント（拍手、音楽など）のタグを無効化\n` +
+        `• \`--num-speakers <数>\`: 話者数を指定（デフォルト: 2）\n\n` +
+        `*使用例:*\n` +
+        `@文字起こしKUN --no-timestamp --num-speakers 3`;
+
       return await sendSlackMessage(
         event.channel,
-        "Please upload an audio or video file with your mention for transcription.",
+        usageMessage,
         event.ts,
       );
     }
 
     // Filter and process audio/video files
-    const audioVideoFiles = event.files.filter(file => 
+    const audioVideoFiles = event.files.filter((file) =>
       file.mimetype?.startsWith("audio/") || file.mimetype?.startsWith("video/")
     );
 
@@ -79,11 +89,11 @@ async function handleAppMention(event: SlackEvent) {
       if (options.diarize && options.numSpeakers && options.numSpeakers !== 2) {
         optionInfo.push(`話者数: ${options.numSpeakers}`);
       }
-      
-      const optionText = optionInfo.length > 0 
-        ? ` (${optionInfo.join(", ")})` 
+
+      const optionText = optionInfo.length > 0
+        ? ` (${optionInfo.join(", ")})`
         : "";
-      
+
       await sendSlackMessage(
         event.channel,
         `Received "${file.name}". Scribing${optionText}...`,
