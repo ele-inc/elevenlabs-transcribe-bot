@@ -5,6 +5,7 @@ This is a Slack bot that uses the [ElevenLabs Scribe API](https://elevenlabs.io/
 ## Features
 
 - Transcribes audio and video files when mentioned in Slack
+- **NEW:** Supports Google Drive video links for transcription
 - Supports speaker diarization to identify different speakers
 - Automatic timestamp insertion for better navigation
 - Audio event detection (music, laughter, etc.)
@@ -24,6 +25,7 @@ Example:
 ```
 @bot transcribe this file --no-timestamp --no-diarize
 @bot transcribe this file --num-speakers 3
+@bot https://drive.google.com/file/d/xxxxx/view --num-speakers 4
 ```
 
 **Note:** The `--num-speakers` option only works when speaker diarization is enabled (default). If you use `--no-diarize`, the num-speakers setting will be ignored.
@@ -83,6 +85,7 @@ SLACK_SIGNING_SECRET="your-slack-signing-secret"
 SUPABASE_URL="your-supabase-url"
 SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
 FUNCTION_SECRET="a-strong-secret-of-your-choice"
+GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account","project_id":"..."}'  # Google service account JSON
 ```
 
 To run the function locally, you can create a `.env.local` file in the root `supabase` directory and run `supabase functions serve --env-file ./supabase/.env.local`.
@@ -136,10 +139,19 @@ The function URL can be found in the output of the `supabase functions deploy` c
 
 ## Usage
 
+### With Slack file uploads:
 1. Upload an audio or video file to a Slack channel
 2. Mention the bot in the same message or as a reply
 3. (Optional) Add transcription options like `--no-timestamp` or `--no-diarize`
 4. The bot will process the file and reply with a transcript text file
+
+### With Google Drive links:
+1. Share a Google Drive video/audio file link in a message
+2. Mention the bot in the same message with the link
+3. (Optional) Add transcription options
+4. The bot will download from Google Drive and transcribe
+
+Example: `@bot https://drive.google.com/file/d/xxxxx/view --num-speakers 3`
 
 ### Supported File Formats
 

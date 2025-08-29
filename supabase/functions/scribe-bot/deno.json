@@ -1,6 +1,5 @@
 {
-  "npm": true,
-  "unstable": true,
+  "unstable": ["kv", "temporal"],
   "compilerOptions": {
     "lib": ["dom", "deno.ns"]
   }
