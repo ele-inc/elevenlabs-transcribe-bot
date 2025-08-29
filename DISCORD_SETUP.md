@@ -71,18 +71,26 @@
 
 ## 4. OAuth2設定とBot招待
 
+### 重要: 必ず以下の手順でBotを招待してください
+
 1. 左メニューから「OAuth2」→「URL Generator」を選択
-2. **Scopes**で以下を選択：
-   - `bot`
-   - `applications.commands`
-3. **Bot Permissions**で以下を選択：(Permissions Integer is 277025490944)
-   - Send Messages
-   - Send Messages in Threads
-   - Attach Files
-   - Read Message History
-   - Use Slash Commands
-4. 生成されたURLをコピーしてブラウザで開く
-5. Botを追加したいサーバーを選択
+2. **Scopes**で以下の**両方**を選択（両方必須）：
+   - ✅ `bot` - Botユーザーをサーバーに追加するために必要
+   - ✅ `applications.commands` - スラッシュコマンドを使用するために必要
+3. **Bot Permissions**で以下を選択：
+   - ✅ Send Messages
+   - ✅ Send Messages in Threads
+   - ✅ Attach Files
+   - ✅ Read Message History
+   - ✅ Use Slash Commands
+   - （権限の整数値: `277025490944`）
+4. ページ下部に生成されたURLをコピー
+5. **生成されたURLをブラウザで直接開く**
+6. Botを追加したいサーバーを選択して「認証」をクリック
+
+### 注意事項
+- `bot` scopeを選択しないと、スラッシュコマンドは使えてもBotがメッセージを送信できません
+- URLは必ず生成されたものをそのまま使用してください
 
 ## 5. 環境変数の設定
 
@@ -139,19 +147,30 @@ supabase secrets set DISCORD_APPLICATION_ID="your_application_id_here"
 
 ## トラブルシューティング
 
-### Interaction Endpoint URLの検証が失敗する場合
+### 「アプリケーションが応答しませんでした」エラーが出る場合
 
-1. Edge Functionが正しくデプロイされているか確認
-2. Public Keyが正しく設定されているか確認
-3. Supabase Function URLが正しいか確認
+1. Interaction Endpoint URLが正しく設定されているか確認
+2. Edge Functionが正しくデプロイされているか確認
+3. 環境変数（特にPublic Key）が正しく設定されているか確認
 
-### Botがオフラインの場合
+### Botがメッセージを送信できない（403エラー）場合
 
-Bot TokenやApplication IDが正しく設定されているか確認してください。
+1. **OAuth2 URL Generatorで`bot`と`applications.commands`の両方のscopeを選択したか確認**
+2. Botがサーバーのメンバーリストに表示されているか確認
+3. チャンネルの権限設定でBotがメッセージ送信を許可されているか確認
+4. プライベートチャンネルの場合、Botを明示的に追加する必要があります
+
+### スラッシュコマンドは使えるがBotがメッセージを送信できない場合
+
+これは`applications.commands` scopeのみで招待した場合に発生します。OAuth2 URL Generatorで`bot` scopeも含めて再度招待してください。
+
+### Botがオフラインと表示される場合
+
+これは正常です。WebhookベースのBotのため、常時オンラインである必要はありません。
 
 ### ファイルがダウンロードできない場合
 
-Botに適切な権限が付与されているか確認してください。
+Botに適切な権限（Attach Files）が付与されているか確認してください。
 
 ## セキュリティ注意事項
 

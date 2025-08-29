@@ -118,14 +118,17 @@ export async function uploadTranscriptToDiscord(
 ): Promise<void> {
   const encoder = new TextEncoder();
   const transcriptBytes = encoder.encode(transcript);
-  const fileName = filename || `transcript_${Date.now()}.txt`;
+  
+  // Use timestamp-based naming like Slack bot
+  const fileTimestamp = Date.now();
+  const transcriptFilename = `transcript_${fileTimestamp}.txt`;
 
   await sendDiscordMessage(
     channelId,
     "✅ 文字起こしが完了しました！",
     undefined,
     [{
-      name: fileName,
+      name: transcriptFilename,
       content: transcriptBytes,
     }]
   );
