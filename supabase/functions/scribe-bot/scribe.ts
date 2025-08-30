@@ -112,6 +112,8 @@ export async function transcribeAudioFile({
     });
 
     console.log("Sending to ElevenLabs API...");
+    const apiStartTime = performance.now();
+    
     const scribeResult = await elevenlabs.speechToText.convert({
       file: fileBlob,
       model_id: "scribe_v1",
@@ -120,6 +122,10 @@ export async function transcribeAudioFile({
       language_code: "ja",
       ...(options.diarize && options.numSpeakers ? { num_speakers: options.numSpeakers } : {}),
     }, { timeoutInSeconds: 180 });
+    
+    const apiTime = (performance.now() - apiStartTime) / 1000;
+    console.log(`[ElevenLabs API] Response received in ${apiTime.toFixed(2)}s`);
+    console.log(`[ElevenLabs API] Speed: ${(fileSizeMB / apiTime).toFixed(2)}MB/s`);
 
     const words: WordItem[] | undefined = (scribeResult as { words?: WordItem[] }).words;
 

@@ -1,5 +1,6 @@
 import { JWT } from "npm:google-auth-library@9.15.0";
 import { google } from "npm:googleapis@144.0.0";
+import { downloadViaExternalRoute } from "./googledrive-external.ts";
 
 // Types for Google Drive file metadata
 interface GoogleDriveFile {
@@ -43,6 +44,7 @@ function initializeGoogleDriveClient() {
   // Replace escaped newlines with actual newlines in private key
   const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
 
+  // Create new auth instance every time (no caching)
   const auth = new JWT({
     email: clientEmail,
     key: formattedPrivateKey,
@@ -50,6 +52,7 @@ function initializeGoogleDriveClient() {
     subject: impersonateEmail, // Impersonate a user in the organization (optional)
   });
 
+  // Create new drive client every time (no caching)
   return google.drive({ version: "v3", auth });
 }
 
@@ -58,11 +61,13 @@ export async function getGoogleDriveFileMetadata(fileId: string): Promise<Google
   const drive = initializeGoogleDriveClient();
 
   try {
+    const metadataStart = performance.now();
     const response = await drive.files.get({
       fileId,
       fields: "id,name,mimeType,size",
       supportsAllDrives: true, // Support for shared drives
     });
+    console.log(`[Google Drive] files.get API call took: ${(performance.now() - metadataStart).toFixed(2)}ms`);
 
     return response.data as GoogleDriveFile;
   } catch (error: any) {
@@ -88,11 +93,22 @@ export async function downloadGoogleDriveFileToPath(
   fileId: string,
   tempPath: string,
 ): Promise<void> {
+  // Try external route if enabled
+  if (Deno.env.get("USE_EXTERNAL_ROUTE") === "true") {
+    console.log("[Google Drive] Using external route method");
+    return downloadViaExternalRoute(fileId, tempPath);
+  }
+  
+  const startTime = performance.now();
   const drive = initializeGoogleDriveClient();
 
   try {
+    console.log(`Starting download for file ${fileId}...`);
+    
     // Get file metadata first to check if it's a Google Docs file
     const metadata = await getGoogleDriveFileMetadata(fileId);
+    const metadataTime = performance.now();
+    console.log(`Metadata fetch took: ${(metadataTime - startTime).toFixed(2)}ms`);
 
     // Check if it's a Google Docs/Sheets/Slides file that needs export
     const exportMimeTypes: Record<string, string> = {
@@ -124,13 +140,30 @@ export async function downloadGoogleDriveFileToPath(
         { responseType: "arraybuffer" }
       );
     }
+    
+    const downloadTime = performance.now();
+    console.log(`API download took: ${(downloadTime - metadataTime).toFixed(2)}ms`);
 
     // Write entire buffer to file at once for maximum speed
     const buffer = new Uint8Array(response.data as ArrayBuffer);
-    await Deno.writeFile(tempPath, buffer);
 
+    const writeStart = performance.now();
+    await Deno.writeFile(tempPath, buffer);
+    const endTime = performance.now();
+    
     const fileSizeMB = buffer.length / (1024 * 1024);
-    console.log(`Download complete: ${fileSizeMB.toFixed(2)}MB`);
+    const totalTime = (endTime - startTime) / 1000;
+    const actualDownloadTime = (downloadTime - metadataTime) / 1000;
+    const writeTime = (endTime - writeStart) / 1000;
+    const throughput = fileSizeMB / actualDownloadTime;
+
+    console.log(`[Google Drive] Download complete:
+      - File size: ${fileSizeMB.toFixed(2)}MB
+      - Metadata fetch: ${((metadataTime - startTime) / 1000).toFixed(2)}s
+      - API download: ${actualDownloadTime.toFixed(2)}s
+      - File write: ${writeTime.toFixed(2)}s
+      - Total time: ${totalTime.toFixed(2)}s
+      - Throughput: ${throughput.toFixed(2)}MB/s`);
   } catch (error: any) {
     if (error.code === 403) {
       throw new Error("Access denied. The file might be private or restricted.");
