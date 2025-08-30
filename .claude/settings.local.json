@@ -20,7 +20,8 @@
       "Bash(gcloud resource-manager org-policies set-policy:*)",
       "Bash(gcloud run deploy:*)",
       "Bash(gcloud beta run services add-iam-policy-binding:*)",
-      "Bash(./update-env.sh)"
+      "Bash(./update-env.sh)",
+      "Bash(gcloud logging read:*)"
     ],
     "deny": [],
     "ask": []

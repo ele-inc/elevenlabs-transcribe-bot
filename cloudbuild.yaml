@@ -29,6 +29,9 @@ steps:
     - '3600'
     - '--max-instances'
     - '10'
+    - '--execution-environment'
+    - 'gen2'
+    - '--cpu-boost'
 
 images:
   - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/scribe-bot/app:$COMMIT_SHA'

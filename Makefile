@@ -35,6 +35,11 @@ status:
 	@echo "📊 Cloud Run Service Status:"
 	@gcloud run services describe scribe-bot --region asia-northeast1 --format="table(status.url,status.traffic.percent,spec.template.spec.containers[0].image)"
 
+# Show environment variables
+env:
+	@echo "🔧 Current Environment Variables:"
+	@gcloud run services describe scribe-bot --region asia-northeast1 --format="yaml" | grep -A 100 "env:" | grep -E "name:|value:" | sed 's/^[ ]*//' | awk 'BEGIN{ORS=""} /name:/{if(NR>1)print "\n"; print $$2 "="} /value:/{print $$2}' | column -t -s "="
+
 # Show logs
 logs:
 	@echo "📜 Recent logs:"
@@ -49,5 +54,6 @@ help:
 	@echo "  make docker-run  - Run Docker container locally"
 	@echo "  make install     - Cache Deno dependencies"
 	@echo "  make status      - Show Cloud Run deployment status"
+	@echo "  make env         - Show current environment variables"
 	@echo "  make logs        - Show recent Cloud Run logs"
 	@echo "  make help        - Show this help message"
