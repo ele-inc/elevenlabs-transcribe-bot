@@ -127,7 +127,7 @@ export async function downloadGoogleDriveFileToPath(
       );
     }
 
-    // Write stream to file
+    // Write stream to file directly without buffering in memory
     const file = await Deno.open(tempPath, {
       create: true,
       write: true,
@@ -135,24 +135,22 @@ export async function downloadGoogleDriveFileToPath(
     });
 
     try {
-      // Handle Node.js Readable stream
-      const chunks: Uint8Array[] = [];
+      // Write chunks directly to file as they arrive
+      let totalBytes = 0;
       
       // response.data is a Node.js Readable stream
       for await (const chunk of response.data as any) {
-        chunks.push(new Uint8Array(chunk));
+        const uint8Chunk = new Uint8Array(chunk);
+        await file.write(uint8Chunk);
+        totalBytes += uint8Chunk.length;
+        
+        // Log progress for large files
+        if (totalBytes % (10 * 1024 * 1024) === 0) {
+          console.log(`Downloaded ${(totalBytes / (1024 * 1024)).toFixed(1)}MB...`);
+        }
       }
       
-      // Concatenate all chunks
-      const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-      const result = new Uint8Array(totalLength);
-      let offset = 0;
-      for (const chunk of chunks) {
-        result.set(chunk, offset);
-        offset += chunk.length;
-      }
-      
-      await file.write(result);
+      console.log(`Download complete: ${(totalBytes / (1024 * 1024)).toFixed(2)}MB`);
     } finally {
       file.close();
     }

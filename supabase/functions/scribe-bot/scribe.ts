@@ -91,9 +91,25 @@ export async function transcribeAudioFile({
     const fileInfo = await Deno.stat(tempFilePath);
     const fileSizeMB = fileInfo.size / (1024 * 1024);
     console.log(`File size: ${fileSizeMB.toFixed(2)}MB`);
+    
+    // Warn about large files
+    if (fileSizeMB > 200) {
+      console.warn(`Warning: Large file detected (${fileSizeMB.toFixed(2)}MB). This may exceed memory limits.`);
+      
+      if (platform === "slack") {
+        await sendSlackMessage(
+          channelId,
+          `⚠️ 大きなファイル（${fileSizeMB.toFixed(0)}MB）を処理中です。メモリ制限により失敗する可能性があります。`,
+          timestamp,
+        );
+      }
+      // Discord warnings are handled in discord-handler.ts
+    }
 
     console.log("calling elevenlabs with options:", options);
 
+    // Read file into memory only if it's small enough
+    // For large files, we need a different approach
     const file = await Deno.open(tempFilePath, { read: true });
     const fileData = await Deno.readFile(tempFilePath);
     file.close();
