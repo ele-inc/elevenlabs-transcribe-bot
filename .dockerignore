@@ -1,0 +1,22 @@
+.git
+.gitignore
+README.md
+DISCORD_SETUP.md
+ALTERNATIVE_SOLUTIONS.md
+CLOUD_RUN_MIGRATION.md
+ENV_VARS.md
+Makefile
+.vscode
+.claude
+.env
+.env.local
+.env.example
+*.log
+node_modules
+dist
+.DS_Store
+*.sh
+cloudbuild-simple.yaml
+register-discord-commands.ts
+# Exclude deno.lock to avoid version conflicts
+supabase/functions/scribe-bot/deno.lock

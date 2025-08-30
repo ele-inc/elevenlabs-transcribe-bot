@@ -5,7 +5,7 @@
 ## 前提条件
 
 - Discord開発者アカウント
-- Supabase Edge Functionがデプロイ済み
+- Cloud Run または Supabase Edge Functionがデプロイ済み
 - 管理者権限を持つDiscordサーバー
 
 ## 1. Discord Applicationの作成
@@ -115,7 +115,14 @@ supabase secrets set DISCORD_APPLICATION_ID="your_application_id_here"
 
 1. Discord Developer Portalに戻る
 2. 「General Information」タブを選択
-3. **Interactions Endpoint URL**に以下を入力：
+3. **Interactions Endpoint URL**に以下のいずれかを入力：
+   
+   **Cloud Runの場合:**
+   ```
+   https://YOUR_CLOUD_RUN_URL/discord/interactions
+   ```
+   
+   **Supabase Edge Functionsの場合:**
    ```
    https://YOUR_SUPABASE_PROJECT_REF.supabase.co/functions/v1/scribe-bot
    ```

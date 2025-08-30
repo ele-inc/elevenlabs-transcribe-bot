@@ -5,12 +5,7 @@ import {
   APIMessageApplicationCommandInteraction,
 } from "npm:discord-api-types@0.37.100/v10";
 
-// Declare EdgeRuntime globally
-declare global {
-  const EdgeRuntime: {
-    waitUntil(promise: Promise<unknown>): void;
-  };
-}
+// EdgeRuntime removed for Cloud Run compatibility
 import { 
   verifyDiscordRequest,
   replyToInteraction,
@@ -127,13 +122,11 @@ async function handleTranscribeCommand(
   const deferResponse = await deferInteractionReply(interaction);
   
   // Process in background
-  globalThis.EdgeRuntime.waitUntil(
-    processDiscordTranscription(interaction, {
-      url: urlOption?.value as string,
-      fileAttachment: fileOption ? interaction.data.resolved?.attachments?.[fileOption.value as string] : null,
-      options: transcriptionOptions,
-    })
-  );
+  processDiscordTranscription(interaction, {
+    url: urlOption?.value as string,
+    fileAttachment: fileOption ? interaction.data.resolved?.attachments?.[fileOption.value as string] : null,
+    options: transcriptionOptions,
+  }).catch(console.error);
 
   return deferResponse;
 }
@@ -179,9 +172,8 @@ async function handleMessageCommand(
 
   if (audioVideoAttachments && audioVideoAttachments.length > 0) {
     for (const attachment of audioVideoAttachments) {
-      globalThis.EdgeRuntime.waitUntil(
-        processDiscordAttachment(interaction, attachment, {})
-      );
+      // Process attachment asynchronously
+      processDiscordAttachment(interaction, attachment, {}).catch(console.error);
     }
   }
 

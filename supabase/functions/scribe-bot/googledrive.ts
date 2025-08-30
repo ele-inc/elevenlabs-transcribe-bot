@@ -31,23 +31,21 @@ export function parseGoogleDriveUrl(url: string): string | null {
 
 // Initialize Google Drive client with service account
 function initializeGoogleDriveClient() {
-  const serviceAccountKey = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_KEY");
+  // Get individual service account components from environment variables
+  const privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
+  const clientEmail = Deno.env.get("GOOGLE_CLIENT_EMAIL")
   const impersonateEmail = Deno.env.get("GOOGLE_IMPERSONATE_EMAIL"); // Optional: email to impersonate
   
-  if (!serviceAccountKey) {
-    throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY environment variable is not set");
+  if (!privateKey) {
+    throw new Error("GOOGLE_PRIVATE_KEY environment variable is not set");
   }
 
-  let credentials;
-  try {
-    credentials = JSON.parse(serviceAccountKey);
-  } catch (error) {
-    throw new Error(`Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY: ${error}`);
-  }
+  // Replace escaped newlines with actual newlines in private key
+  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
 
   const auth = new JWT({
-    email: credentials.client_email,
-    key: credentials.private_key,
+    email: clientEmail,
+    key: formattedPrivateKey,
     scopes: ["https://www.googleapis.com/auth/drive"],  // Match the scope in Admin Console
     subject: impersonateEmail, // Impersonate a user in the organization (optional)
   });

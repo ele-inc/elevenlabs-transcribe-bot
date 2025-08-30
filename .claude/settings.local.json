@@ -11,7 +11,16 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(chmod:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(gcloud projects add-iam-policy-binding:*)",
+      "Bash(gcloud run services update:*)",
+      "Bash(gcloud resource-manager org-policies delete:*)",
+      "Bash(gcloud run services add-iam-policy-binding:*)",
+      "Bash(gcloud resource-manager org-policies describe:*)",
+      "Bash(gcloud resource-manager org-policies set-policy:*)",
+      "Bash(gcloud run deploy:*)",
+      "Bash(gcloud beta run services add-iam-policy-binding:*)",
+      "Bash(./update-env.sh)"
     ],
     "deny": [],
     "ask": []

@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+// Removed Supabase Edge Runtime dependency for Cloud Run
 import { SlackEvent } from "./types.ts";
 import { parseTranscriptionOptions, extractGoogleDriveUrls } from "./utils.ts";
 import { sendSlackMessage } from "./slack.ts";
@@ -116,8 +116,8 @@ async function handleAppMention(event: SlackEvent) {
         const fileURL = `file://${tempPath}`;
 
         // Run transcription in the background
-        EdgeRuntime.waitUntil(
-          transcribeAudioFile({
+        // Process transcription asynchronously without blocking response
+        transcribeAudioFile({
             fileURL,
             fileType: mimeType,
             duration: 0, // Duration not available from Google Drive
@@ -128,8 +128,7 @@ async function handleAppMention(event: SlackEvent) {
             filename,
             isGoogleDrive: true,
             tempPath, // Pass temp path for cleanup
-          }),
-        );
+          }).catch(console.error);
       } catch (error) {
         console.error("Google Drive processing error:", error);
         await sendSlackMessage(
@@ -200,8 +199,7 @@ async function handleAppMention(event: SlackEvent) {
       );
 
       // Run the transcription in the background
-      EdgeRuntime.waitUntil(
-        transcribeAudioFile({
+      transcribeAudioFile({
           fileURL,
           fileType: file.mimetype || "",
           duration: file.duration || 0,
@@ -210,8 +208,7 @@ async function handleAppMention(event: SlackEvent) {
           userId: event.user,
           options,
           filename: file.name,
-        }),
-      );
+        }).catch(console.error);
     }
   } catch (error) {
     console.error(error);
@@ -223,43 +220,32 @@ async function handleAppMention(event: SlackEvent) {
   }
 }
 
-Deno.serve(async (req) => {
+const port = parseInt(Deno.env.get("PORT") || "8080");
+
+Deno.serve({ port }, async (req) => {
   try {
+    const url = new URL(req.url);
+    const pathname = url.pathname;
+    
     // Log incoming request for debugging
     console.log("Incoming request method:", req.method);
     console.log("Incoming request URL:", req.url);
+    console.log("Path:", pathname);
     
-    // Check if this is a Discord request (checking both cases for header)
-    const isDiscordRequest = 
-      req.headers.get("x-signature-ed25519") !== null || 
-      req.headers.get("X-Signature-Ed25519") !== null ||
-      req.headers.get("x-signature-timestamp") !== null;
+    // Health check endpoint
+    if (pathname === "/" && req.method === "GET") {
+      return new Response("ElevenLabs Scribe Bot is running!", { status: 200 });
+    }
     
-    if (isDiscordRequest) {
+    // Discord endpoint
+    if (pathname === "/discord/interactions") {
       console.log("Discord request detected");
       // Handle Discord interactions
       return await handleDiscordInteraction(req);
     }
     
-    // Also handle Discord PING without headers (for initial verification)
-    if (req.method === "POST") {
-      try {
-        const bodyText = await req.clone().text();
-        const body = JSON.parse(bodyText);
-        if (body.type === 0) { // InteractionType.Ping
-          console.log("Discord PING detected (no headers)");
-          return new Response(
-            JSON.stringify({ type: 1 }),
-            { headers: { "Content-Type": "application/json" } }
-          );
-        }
-      } catch {
-        // Not a Discord PING, continue to Slack handling
-      }
-    }
-    
-    // Handle Slack requests
-    if (req.method === "POST") {
+    // Slack endpoint
+    if (pathname === "/slack/events" && req.method === "POST") {
       const bodyText = await req.text();
       const body = JSON.parse(bodyText);
 
@@ -279,7 +265,7 @@ Deno.serve(async (req) => {
           return new Response("OK", { status: 200 });
         }
         // Process in background to respond quickly to Slack
-        EdgeRuntime.waitUntil(handleAppMention(event));
+        handleAppMention(event).catch(console.error);
         return new Response("OK", { status: 200 });
       }
     }

@@ -1,9 +1,8 @@
 import { ElevenLabsClient } from "npm:elevenlabs@1.59.0";
-import { createClient } from "jsr:@supabase/supabase-js@^2";
-import { 
-  TranscriptionOptions, 
-  WordItem, 
-  TranscriptionLog 
+import {
+  TranscriptionOptions,
+  WordItem,
+  TranscriptionLog
 } from "./types.ts";
 import {
   getFileExtensionFromMime,
@@ -23,21 +22,15 @@ import {
 } from "./discord.ts";
 
 const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-if (!ELEVENLABS_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error("Missing required environment variables for Scribe service");
+if (!ELEVENLABS_API_KEY) {
+  throw new Error("Missing ELEVENLABS_API_KEY environment variable - required for transcription");
 }
 
 const elevenlabs = new ElevenLabsClient({
   apiKey: ELEVENLABS_API_KEY,
 });
 
-const supabase = createClient(
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
-);
 
 export async function transcribeAudioFile({
   fileURL,
@@ -71,7 +64,7 @@ export async function transcribeAudioFile({
 
   console.log("fileURL", fileURL, "scribe called");
   console.log("fileType (MIME):", fileType);
-  
+
   try {
     // Handle Google Drive files vs Slack files
     if (isGoogleDrive && tempPath) {
@@ -91,11 +84,11 @@ export async function transcribeAudioFile({
     const fileInfo = await Deno.stat(tempFilePath);
     const fileSizeMB = fileInfo.size / (1024 * 1024);
     console.log(`File size: ${fileSizeMB.toFixed(2)}MB`);
-    
+
     // Warn about large files
     if (fileSizeMB > 200) {
       console.warn(`Warning: Large file detected (${fileSizeMB.toFixed(2)}MB). This may exceed memory limits.`);
-      
+
       if (platform === "slack") {
         await sendSlackMessage(
           channelId,
@@ -113,7 +106,7 @@ export async function transcribeAudioFile({
     const file = await Deno.open(tempFilePath, { read: true });
     const fileData = await Deno.readFile(tempFilePath);
     file.close();
-    
+
     const fileBlob = new Blob([fileData], {
       type: fileType,
     });
@@ -127,9 +120,6 @@ export async function transcribeAudioFile({
       language_code: "ja",
       ...(options.diarize && options.numSpeakers ? { num_speakers: options.numSpeakers } : {}),
     }, { timeoutInSeconds: 180 });
-
-    console.log("ElevenLabs API response received");
-    console.log("Scribe result:", JSON.stringify(scribeResult, null, 2));
 
     const words: WordItem[] | undefined = (scribeResult as { words?: WordItem[] }).words;
 
@@ -165,15 +155,12 @@ export async function transcribeAudioFile({
 
     languageCode = (scribeResult as { language_code?: string }).language_code || null;
 
-    console.log("Generated transcript:", transcript);
-    console.log("Language code:", languageCode);
-
     if (transcript) {
       // Add header with filename if provided
-      const finalTranscript = filename 
+      const finalTranscript = filename
         ? createTranscriptionHeader(filename) + transcript
         : transcript;
-      
+
       if (platform === "slack") {
         await uploadTranscriptToSlack(finalTranscript, channelId, timestamp);
       } else if (platform === "discord") {
@@ -196,7 +183,7 @@ export async function transcribeAudioFile({
     }
   } catch (error) {
     errorMsg = error instanceof Error ? error.message : String(error);
-    
+
     if (platform === "slack") {
       await sendSlackMessage(
         channelId,
@@ -256,6 +243,11 @@ export async function transcribeAudioFile({
     language_code: languageCode,
     error: errorMsg,
   };
-  
-  await supabase.from("transcription_logs").insert({ ...logLine, transcript });
+
+  // Log transcription completion to console
+  console.log("Transcription completed:", {
+    ...logLine,
+    transcriptLength: transcript ? transcript.length : 0,
+    timestamp: new Date().toISOString()
+  });
 }
