@@ -9,6 +9,7 @@ import { sendSlackMessage } from "./slack.ts";
 import { transcribeAudioFile } from "./scribe.ts";
 import { downloadGoogleDriveFile } from "./googledrive.ts";
 import { logError } from "./errors.ts";
+import { textResponse, okResponse, badRequest, parseJsonBody } from "./http-utils.ts";
 
 // Set to track processed events (with size limit to prevent memory leak)
 const processedEvents = new Set<string>();
@@ -38,34 +39,33 @@ export async function handleAppMention(event: SlackEvent) {
   const options = parseTranscriptionOptions(event.text);
   console.log("Parsed options:", options);
 
-  try {
-    // Check for Google Drive URLs in the message
-    const googleDriveUrls = extractGoogleDriveUrls(event.text || "");
+  // Check for Google Drive URLs in the message
+  const googleDriveUrls = extractGoogleDriveUrls(event.text || "");
 
-    // Check if the mention includes files or Google Drive URLs
-    if ((!event.files || event.files.length === 0) && googleDriveUrls.length === 0) {
-      const usageMessage = `📝 *使い方*\n\n` +
-        `音声または動画ファイルをアップロードしてメンションするか、\n` +
-        `Google Driveのリンクを含めてメンションしてください。\n\n` +
-        `*オプション:*\n` +
-        `• \`--no-diarize\`: 話者識別を無効化\n` +
-        `• \`--no-timestamp\`: タイムスタンプを非表示\n` +
-        `• \`--no-audio-events\`: 音声イベント（拍手、音楽など）のタグを無効化\n` +
-        `• \`--num-speakers <数>\`: 話者数を指定（デフォルト: 2）\n\n` +
-        `*使用例:*\n` +
-        `@文字起こしKUN --no-timestamp --num-speakers 3\n` +
-        `@文字起こしKUN https://drive.google.com/file/d/xxxxx/view`;
+  // Check if the mention includes files or Google Drive URLs
+  if ((!event.files || event.files.length === 0) && googleDriveUrls.length === 0) {
+    const usageMessage = `📝 *使い方*\n\n` +
+      `音声または動画ファイルをアップロードしてメンションするか、\n` +
+      `Google Driveのリンクを含めてメンションしてください。\n\n` +
+      `*オプション:*\n` +
+      `• \`--no-diarize\`: 話者識別を無効化\n` +
+      `• \`--no-timestamp\`: タイムスタンプを非表示\n` +
+      `• \`--no-audio-events\`: 音声イベント（拍手、音楽など）のタグを無効化\n` +
+      `• \`--num-speakers <数>\`: 話者数を指定（デフォルト: 2）\n\n` +
+      `*使用例:*\n` +
+      `@文字起こしKUN --no-timestamp --num-speakers 3\n` +
+      `@文字起こしKUN https://drive.google.com/file/d/xxxxx/view`;
 
-      return await sendSlackMessage(
-        event.channel,
-        usageMessage,
-        event.ts,
-      );
-    }
+    await sendSlackMessage(
+      event.channel,
+      usageMessage,
+      event.ts,
+    );
+    return;
+  }
 
-    // Process Google Drive URLs first
-    for (const driveUrl of googleDriveUrls) {
-      try {
+  // Process Google Drive URLs first
+  for (const driveUrl of googleDriveUrls) {
         // Create temporary file path
         const tempDir = await Deno.makeTempDir();
         const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
@@ -128,15 +128,7 @@ export async function handleAppMention(event: SlackEvent) {
             isGoogleDrive: true,
             tempPath, // Pass temp path for cleanup
           }).catch(console.error);
-      } catch (error) {
-        logError(error as Error, { context: 'Google Drive processing', driveUrl });
-        await sendSlackMessage(
-          event.channel,
-          `Google Driveファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : "Unknown error"}`,
-          event.ts,
-        );
-      }
-    }
+  }
 
     // Process regular Slack files
     if (event.files && event.files.length > 0) {
@@ -181,14 +173,6 @@ export async function handleAppMention(event: SlackEvent) {
           options,
           filename: file.name,
         }).catch(console.error);
-    }
-  } catch (error) {
-    logError(error as Error, { context: 'handleAppMention', eventId: `${event.channel}_${event.ts}_${event.user}` });
-    return await sendSlackMessage(
-      event.channel,
-      "Sorry, there was an error processing your files. Please try again!",
-      event.ts,
-    );
   }
 }
 
@@ -196,10 +180,7 @@ export async function handleAppMention(event: SlackEvent) {
  * Handle Slack URL verification challenge
  */
 export function handleUrlVerification(challenge: string): Response {
-  return new Response(challenge, {
-    status: 200,
-    headers: { "Content-Type": "text/plain" },
-  });
+  return textResponse(challenge);
 }
 
 /**
@@ -219,13 +200,13 @@ export async function handleSlackEvents(req: Request): Promise<Response> {
     const event = body.event;
 
     if (event.type !== "app_mention") {
-      return new Response("OK", { status: 200 });
+      return okResponse();
     }
     
     // Process in background to respond quickly to Slack
     handleAppMention(event).catch(console.error);
-    return new Response("OK", { status: 200 });
+    return okResponse();
   }
 
-  return new Response("Unknown event type", { status: 400 });
+  return badRequest("Unknown event type");
 }
