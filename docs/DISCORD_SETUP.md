@@ -29,35 +29,8 @@
 
 ## 3. Slash Commandsの登録
 
-以下のコマンドを登録します：
-
-### /transcribe コマンド
-
-```json
-{
-  "name": "transcribe",
-  "description": "音声/動画ファイルを文字起こしします",
-  "options": [
-    {
-      "name": "file",
-      "description": "文字起こしするファイル",
-      "type": 11,
-      "required": false
-    },
-    {
-      "name": "url",
-      "description": "Google DriveのURL",
-      "type": 3,
-      "required": false
-    },
-    {
-      "name": "options",
-      "description": "オプション (--no-diarize, --no-timestamp, --num-speakers 3 など)",
-      "type": 3,
-      "required": false
-    }
-  ]
-}
+```
+deno run --allow-net --allow-env scripts/register-discord-commands.ts
 ```
 
 ### Message Command (右クリックメニュー)

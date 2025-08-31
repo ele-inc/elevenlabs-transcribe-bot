@@ -16,7 +16,6 @@ node_modules
 dist
 .DS_Store
 *.sh
-cloudbuild-simple.yaml
 register-discord-commands.ts
 # Exclude deno.lock to avoid version conflicts
 supabase/functions/scribe-bot/deno.lock

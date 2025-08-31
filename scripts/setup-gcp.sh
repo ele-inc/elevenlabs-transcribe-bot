@@ -32,7 +32,7 @@ check_permissions() {
         --flatten="bindings[].members" \
         --filter="bindings.members:$CURRENT_USER" \
         --format="value(bindings.role)" 2>/dev/null || echo "")
-    
+
     if [[ $roles == *"owner"* ]] || [[ $roles == *"editor"* ]]; then
         return 0
     else
@@ -59,56 +59,56 @@ case $choice in
     1)
         # Use existing project
         read -p "Enter the PROJECT_ID from the list above: " PROJECT_ID
-        
+
         # Check permissions
         if check_permissions $PROJECT_ID; then
             echo "✅ You have sufficient permissions for $PROJECT_ID"
         else
             echo "⚠️  You don't have owner/editor role. Attempting to add necessary permissions..."
-            
+
             # Try to add permissions (will fail if not owner)
             echo "Attempting to grant permissions to yourself..."
             gcloud projects add-iam-policy-binding $PROJECT_ID \
                 --member="user:$CURRENT_USER" \
                 --role="roles/cloudbuild.builds.editor" 2>/dev/null || echo "Could not add Cloud Build Editor role"
-            
+
             gcloud projects add-iam-policy-binding $PROJECT_ID \
                 --member="user:$CURRENT_USER" \
                 --role="roles/run.admin" 2>/dev/null || echo "Could not add Cloud Run Admin role"
-            
+
             gcloud projects add-iam-policy-binding $PROJECT_ID \
                 --member="user:$CURRENT_USER" \
                 --role="roles/storage.admin" 2>/dev/null || echo "Could not add Storage Admin role"
-            
+
             gcloud projects add-iam-policy-binding $PROJECT_ID \
                 --member="user:$CURRENT_USER" \
                 --role="roles/serviceusage.serviceUsageConsumer" 2>/dev/null || echo "Could not add Service Usage Consumer role"
         fi
         ;;
-        
+
     2)
         # Create new project
         echo ""
         read -p "Enter a name for your new project (lowercase, hyphens allowed): " PROJECT_NAME
         PROJECT_ID="${PROJECT_NAME}-$(date +%s)"
-        
+
         echo "Creating project: $PROJECT_ID"
         gcloud projects create $PROJECT_ID --name="$PROJECT_NAME" || {
             echo "❌ Failed to create project. Try a different name."
             exit 1
         }
-        
+
         echo "✅ Project created successfully!"
-        
+
         # Link billing account
         echo ""
         echo "📊 Available billing accounts:"
         BILLING_ACCOUNTS=$(gcloud billing accounts list --format="value(name)" 2>/dev/null)
-        
+
         if [ -n "$BILLING_ACCOUNTS" ]; then
             echo "$BILLING_ACCOUNTS"
             read -p "Enter the billing account ID (or press Enter to skip): " BILLING_ACCOUNT
-            
+
             if [ -n "$BILLING_ACCOUNT" ]; then
                 gcloud billing projects link $PROJECT_ID --billing-account=$BILLING_ACCOUNT || {
                     echo "⚠️  Could not link billing account. You can do this later in Cloud Console."
@@ -118,11 +118,11 @@ case $choice in
             echo "⚠️  No billing accounts found. You'll need to set up billing in Cloud Console."
         fi
         ;;
-        
+
     3)
         # Request permissions
         read -p "Enter the PROJECT_ID you need permissions for: " PROJECT_ID
-        
+
         echo ""
         echo "📧 Send this to your project administrator:"
         echo "=========================================="
@@ -170,7 +170,7 @@ EOF
         echo "📋 Copy the above message and send it to your administrator."
         exit 0
         ;;
-        
+
     *)
         echo "Invalid choice"
         exit 1
@@ -246,13 +246,13 @@ echo ""
 echo "🔍 Checking environment variables..."
 if [ -f .env ]; then
     source .env
-    
+
     if [ -z "$ELEVENLABS_API_KEY" ] || [ "$ELEVENLABS_API_KEY" = "your-elevenlabs-api-key" ]; then
         echo "  ⚠️  ELEVENLABS_API_KEY not set - required for transcription"
     else
         echo "  ✅ ELEVENLABS_API_KEY is set"
     fi
-    
+
     if [ -z "$SLACK_BOT_TOKEN" ] || [ "$SLACK_BOT_TOKEN" = "xoxb-your-bot-token" ]; then
         echo "  ⚠️  SLACK_BOT_TOKEN not set - required for Slack integration"
     else

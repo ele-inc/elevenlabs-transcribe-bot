@@ -23,9 +23,6 @@ build/
 *.pyc
 __pycache__/
 
-# Cloud Build
-cloudbuild-simple.yaml
-
 # Temporary files
 *.tmp
 tmp/
