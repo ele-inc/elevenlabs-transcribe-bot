@@ -145,7 +145,7 @@ export async function downloadSlackFile(fileURL: string): Promise<ArrayBuffer> {
 }
 
 export async function downloadSlackFileToPath(fileURL: string, filePath: string): Promise<void> {
-  console.log("downloading file to:", filePath);
+  console.log("streaming file to:", filePath);
   const response = await fetch(fileURL, {
     headers: {
       "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
@@ -175,9 +175,29 @@ export async function downloadSlackFileToPath(fileURL: string, filePath: string)
     console.log("File size:", contentLength, "bytes");
   }
 
-  // Download entire file at once for maximum speed
-  const buffer = await response.arrayBuffer();
-  await Deno.writeFile(filePath, new Uint8Array(buffer));
+  if (!response.body) {
+    throw new Error("Response body is null");
+  }
 
-  console.log(`Download complete: ${buffer.byteLength} bytes (${(buffer.byteLength / (1024 * 1024)).toFixed(2)}MB)`);
+  const file = await Deno.open(filePath, { write: true, create: true });
+  try {
+    const reader = response.body.getReader();
+    let totalBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      await file.write(value);
+      totalBytes += value.byteLength;
+
+      if (totalBytes % (10 * 1024 * 1024) === 0) {
+        console.log(`Downloaded ${totalBytes / (1024 * 1024)}MB...`);
+      }
+    }
+
+    console.log(`Download complete: ${totalBytes} bytes`);
+  } finally {
+    file.close();
+  }
 }
