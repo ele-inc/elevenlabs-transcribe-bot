@@ -134,7 +134,7 @@ export async function handleAppMention(event: SlackEvent) {
     if (event.files && event.files.length > 0) {
       for (const file of event.files) {
         // Check if file is not audio or video
-        if (!file.mimetype.startsWith("audio/") && !file.mimetype.startsWith("video/")) {
+        if (!file.mimetype || (!file.mimetype.startsWith("audio/") && !file.mimetype.startsWith("video/"))) {
           await sendSlackMessage(
             event.channel,
             `ファイル "${file.name}" は音声または動画ファイルではありません。`,
@@ -164,16 +164,17 @@ export async function handleAppMention(event: SlackEvent) {
 
         // Process transcription asynchronously without blocking response
         transcribeAudioFile({
-          fileURL: file.url_private,
-          fileType: file.mimetype,
-          duration: file.duration_ms || 0,
+          fileURL: file.url_private || "",
+          fileType: file.mimetype || "",
+          duration: file.duration || 0,
           channelId: event.channel,
           timestamp: event.ts,
           userId: event.user,
           options,
           filename: file.name,
         }).catch(console.error);
-  }
+      }
+    }
 }
 
 /**
@@ -202,7 +203,7 @@ export async function handleSlackEvents(req: Request): Promise<Response> {
     if (event.type !== "app_mention") {
       return okResponse();
     }
-    
+
     // Process in background to respond quickly to Slack
     handleAppMention(event).catch(console.error);
     return okResponse();
