@@ -8,8 +8,7 @@ import { parseTranscriptionOptions, extractGoogleDriveUrls } from "./utils.ts";
 import { sendSlackMessage } from "./slack.ts";
 import { transcribeAudioFile } from "./scribe.ts";
 import { downloadGoogleDriveFile } from "./googledrive.ts";
-import { logError } from "./errors.ts";
-import { textResponse, okResponse, badRequest, parseJsonBody } from "./http-utils.ts";
+import { textResponse, okResponse, badRequest } from "./http-utils.ts";
 
 // Set to track processed events (with size limit to prevent memory leak)
 const processedEvents = new Set<string>();
