@@ -1,5 +1,6 @@
 import { JWT } from "npm:google-auth-library@9.15.0";
 import { google } from "npm:googleapis@144.0.0";
+import { config } from "./config.ts";
 
 // Types for Google Drive file metadata
 interface GoogleDriveFile {
@@ -31,23 +32,18 @@ export function parseGoogleDriveUrl(url: string): string | null {
 
 // Initialize Google Drive client with service account
 function initializeGoogleDriveClient() {
-  // Get individual service account components from environment variables
-  const privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
-  const clientEmail = Deno.env.get("GOOGLE_CLIENT_EMAIL")
-  const impersonateEmail = Deno.env.get("GOOGLE_IMPERSONATE_EMAIL"); // Optional: email to impersonate
-
-  if (!privateKey) {
+  if (!config.googlePrivateKey) {
     throw new Error("GOOGLE_PRIVATE_KEY environment variable is not set");
   }
 
   // Replace escaped newlines with actual newlines in private key
-  const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
+  const formattedPrivateKey = config.googlePrivateKey.replace(/\\n/g, '\n');
 
   const auth = new JWT({
-    email: clientEmail,
+    email: config.googleClientEmail,
     key: formattedPrivateKey,
     scopes: ["https://www.googleapis.com/auth/drive"],  // Match the scope in Admin Console
-    subject: impersonateEmail, // Impersonate a user in the organization (optional)
+    subject: config.googleImpersonateEmail, // Impersonate a user in the organization (optional)
   });
 
   return google.drive({ version: "v3", auth });

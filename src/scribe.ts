@@ -22,15 +22,10 @@ import {
   sendDiscordMessage,
   uploadTranscriptToDiscord,
 } from "./discord.ts";
-
-const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
-
-if (!ELEVENLABS_API_KEY) {
-  throw new Error("Missing ELEVENLABS_API_KEY environment variable - required for transcription");
-}
+import { config } from "./config.ts";
 
 const elevenlabs = new ElevenLabsClient({
-  apiKey: ELEVENLABS_API_KEY,
+  apiKey: config.elevenLabsApiKey,
 });
 
 

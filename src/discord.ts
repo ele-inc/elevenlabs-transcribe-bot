@@ -3,10 +3,7 @@ import {
   APIEmbed,
 } from "npm:discord-api-types@0.37.100/v10";
 import nacl from "npm:tweetnacl@1.0.3";
-
-const DISCORD_PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY") || "";
-const DISCORD_BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN") || "";
-const DISCORD_APPLICATION_ID = Deno.env.get("DISCORD_APPLICATION_ID") || "";
+import { config } from "./config.ts";
 
 // Helper function to convert hex string to Uint8Array
 function hexToUint8Array(hex: string): Uint8Array {
@@ -18,7 +15,7 @@ function hexToUint8Array(hex: string): Uint8Array {
 // Verify Discord request signature using TweetNaCl
 export async function verifyDiscordRequest(
   request: Request,
-  publicKey: string = DISCORD_PUBLIC_KEY
+  publicKey: string = config.discordPublicKey
 ): Promise<boolean> {
   // Discord sends headers in lowercase
   const signature = request.headers.get("x-signature-ed25519") || request.headers.get("X-Signature-Ed25519");
@@ -93,7 +90,7 @@ export async function sendDiscordMessage(
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
+      Authorization: `Bot ${config.discordBotToken}`,
     },
     body: formData,
   });
@@ -165,13 +162,13 @@ export async function editInteractionReply(
   content: string,
   embeds?: APIEmbed[]
 ): Promise<void> {
-  const url = `https://discord.com/api/v10/webhooks/${DISCORD_APPLICATION_ID}/${interactionToken}/messages/@original`;
+  const url = `https://discord.com/api/v10/webhooks/${config.discordApplicationId}/${interactionToken}/messages/@original`;
 
   const response = await fetch(url, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
+      Authorization: `Bot ${config.discordBotToken}`,
     },
     body: JSON.stringify({
       content,

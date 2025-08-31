@@ -5,6 +5,7 @@ import { sendSlackMessage } from "./slack.ts";
 import { transcribeAudioFile } from "./scribe.ts";
 import { downloadGoogleDriveFile } from "./googledrive.ts";
 import { handleDiscordInteraction } from "./discord-handler.ts";
+import { config } from "./config.ts";
 
 console.log(`Function "elevenlabs-scribe-bot" up and running!`);
 
@@ -220,7 +221,7 @@ async function handleAppMention(event: SlackEvent) {
   }
 }
 
-const port = parseInt(Deno.env.get("PORT") || "8080");
+const port = config.port;
 
 Deno.serve({ port }, async (req) => {
   try {

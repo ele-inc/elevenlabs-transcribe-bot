@@ -1,8 +1,4 @@
-const SLACK_BOT_TOKEN = Deno.env.get("SLACK_BOT_TOKEN");
-
-if (!SLACK_BOT_TOKEN) {
-  throw new Error("SLACK_BOT_TOKEN environment variable is missing");
-}
+import { config } from "./config.ts";
 
 export async function sendSlackMessage(
   channel: string,
@@ -12,7 +8,7 @@ export async function sendSlackMessage(
   const response = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
+      "Authorization": `Bearer ${config.slackBotToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -53,7 +49,7 @@ export async function uploadTranscriptToSlack(
     {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
+        "Authorization": `Bearer ${config.slackBotToken}`,
       },
       body: formData1,
     },
@@ -97,7 +93,7 @@ export async function uploadTranscriptToSlack(
     {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
+        "Authorization": `Bearer ${config.slackBotToken}`,
       },
       body: formData2,
     },
@@ -120,7 +116,7 @@ export async function downloadSlackFile(fileURL: string): Promise<ArrayBuffer> {
   console.log("fetching file");
   const response = await fetch(fileURL, {
     headers: {
-      "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
+      "Authorization": `Bearer ${config.slackBotToken}`,
     },
   });
 
@@ -148,7 +144,7 @@ export async function downloadSlackFileToPath(fileURL: string, filePath: string)
   console.log("streaming file to:", filePath);
   const response = await fetch(fileURL, {
     headers: {
-      "Authorization": `Bearer ${SLACK_BOT_TOKEN}`,
+      "Authorization": `Bearer ${config.slackBotToken}`,
     },
   });
 
