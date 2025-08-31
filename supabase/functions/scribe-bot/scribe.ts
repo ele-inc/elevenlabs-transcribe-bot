@@ -164,7 +164,7 @@ export async function transcribeAudioFile({
       if (platform === "slack") {
         await uploadTranscriptToSlack(finalTranscript, channelId, timestamp);
       } else if (platform === "discord") {
-        await uploadTranscriptToDiscord(finalTranscript, channelId, filename);
+        await uploadTranscriptToDiscord(finalTranscript, channelId);
       }
     } else {
       console.log("No transcript generated, sending error message");

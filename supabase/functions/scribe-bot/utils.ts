@@ -1,9 +1,9 @@
 import { TranscriptionOptions, WordItem, Sentence, SpeakerUtterance } from "./types.ts";
-import { isGoogleDriveUrl, parseGoogleDriveUrl } from "./googledrive.ts";
+import { isGoogleDriveUrl } from "./googledrive.ts";
 
 export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptions => {
   const diarize = !text.includes("--no-diarize");
-  
+
   // Parse num-speakers from command, or use default of 2 when diarize is enabled
   let numSpeakers: number | undefined;
   if (diarize) {
@@ -15,7 +15,7 @@ export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptio
       numSpeakers = 2; // Default to 2 speakers when diarize is true
     }
   }
-  
+
   return {
     diarize,
     showTimestamp: !text.includes("--no-timestamp"),

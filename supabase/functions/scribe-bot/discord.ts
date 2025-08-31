@@ -1,10 +1,5 @@
-import { 
-  InteractionType, 
+import {
   InteractionResponseType,
-  APIInteraction,
-  APIApplicationCommandInteraction,
-  APIMessageComponentInteraction,
-  APIChatInputApplicationCommandInteraction,
   APIEmbed,
 } from "npm:discord-api-types@0.37.100/v10";
 import nacl from "npm:tweetnacl@1.0.3";
@@ -28,13 +23,13 @@ export async function verifyDiscordRequest(
   // Discord sends headers in lowercase
   const signature = request.headers.get("x-signature-ed25519") || request.headers.get("X-Signature-Ed25519");
   const timestamp = request.headers.get("x-signature-timestamp") || request.headers.get("X-Signature-Timestamp");
-  
+
   console.log("Discord verification - headers:", {
     signature: signature ? "present" : "missing",
     timestamp: timestamp ? "present" : "missing",
     publicKey: publicKey ? "present" : "missing"
   });
-  
+
   if (!signature || !timestamp || !publicKey) {
     console.error("Missing required data for Discord verification");
     return false;
@@ -42,23 +37,23 @@ export async function verifyDiscordRequest(
 
   const body = await request.clone().text();
   console.log("Discord verification - body type:", body.includes('"type":0') ? "PING" : "Other");
-  
+
   try {
     // Concatenate timestamp and body
     const message = timestamp + body;
     const messageData = new TextEncoder().encode(message);
-    
+
     // Convert hex strings to Uint8Array
     const signatureData = hexToUint8Array(signature);
     const publicKeyData = hexToUint8Array(publicKey);
-    
+
     // Verify the signature using Ed25519
     const isValid = nacl.sign.detached.verify(
       messageData,
       signatureData,
       publicKeyData
     );
-    
+
     console.log("Discord verification result:", isValid);
     return isValid;
   } catch (error) {
@@ -75,15 +70,15 @@ export async function sendDiscordMessage(
   files?: { name: string; content: Uint8Array }[]
 ): Promise<void> {
   const url = `https://discord.com/api/v10/channels/${channelId}/messages`;
-  
+
   const formData = new FormData();
-  
+
   const payload: any = {};
   if (content) payload.content = content;
   if (embeds) payload.embeds = embeds;
-  
+
   formData.append("payload_json", JSON.stringify(payload));
-  
+
   // Add files if present
   if (files) {
     files.forEach((file, index) => {
@@ -114,11 +109,10 @@ export async function sendDiscordMessage(
 export async function uploadTranscriptToDiscord(
   transcript: string,
   channelId: string,
-  filename?: string
 ): Promise<void> {
   const encoder = new TextEncoder();
   const transcriptBytes = encoder.encode(transcript);
-  
+
   // Use timestamp-based naming like Slack bot
   const fileTimestamp = Date.now();
   const transcriptFilename = `transcript_${fileTimestamp}.txt`;
@@ -136,9 +130,8 @@ export async function uploadTranscriptToDiscord(
 
 // Reply to Discord interaction
 export async function replyToInteraction(
-  interaction: APIInteraction,
   content: string,
-  ephemeral: boolean = false
+  ephemeral: boolean = false,
 ): Promise<Response> {
   return new Response(
     JSON.stringify({
@@ -155,9 +148,7 @@ export async function replyToInteraction(
 }
 
 // Defer interaction reply (for long-running operations)
-export async function deferInteractionReply(
-  interaction: APIInteraction
-): Promise<Response> {
+export function deferInteractionReply(): Response {
   return new Response(
     JSON.stringify({
       type: InteractionResponseType.DeferredChannelMessageWithSource,
@@ -175,7 +166,7 @@ export async function editInteractionReply(
   embeds?: APIEmbed[]
 ): Promise<void> {
   const url = `https://discord.com/api/v10/webhooks/${DISCORD_APPLICATION_ID}/${interactionToken}/messages/@original`;
-  
+
   const response = await fetch(url, {
     method: "PATCH",
     headers: {
@@ -198,7 +189,7 @@ export async function editInteractionReply(
 export async function downloadDiscordFile(url: string): Promise<Uint8Array> {
   console.log("Downloading Discord file from:", url);
   const response = await fetch(url);
-  
+
   if (!response.ok) {
     throw new Error(`Failed to download Discord file: ${response.status}`);
   }
@@ -206,7 +197,7 @@ export async function downloadDiscordFile(url: string): Promise<Uint8Array> {
   // Download entire file at once for maximum speed
   const arrayBuffer = await response.arrayBuffer();
   const buffer = new Uint8Array(arrayBuffer);
-  
+
   console.log(`Download complete: ${(buffer.length / (1024 * 1024)).toFixed(2)}MB`);
   return buffer;
 }
@@ -216,7 +207,7 @@ export function getDiscordFileInfo(url: string): { name: string; extension: stri
   const urlParts = url.split("/");
   const filename = urlParts[urlParts.length - 1].split("?")[0];
   const extension = filename.split(".").pop() || "";
-  
+
   return {
     name: filename,
     extension,
@@ -233,11 +224,11 @@ export function formatDiscordMessage(
 ): string {
   // Discord has a 2000 character limit for messages
   const MAX_LENGTH = 1900; // Leave some buffer
-  
+
   if (transcript.length <= MAX_LENGTH) {
     return transcript;
   }
-  
+
   // Truncate and add indicator
   return transcript.substring(0, MAX_LENGTH) + "\n\n... (完全な文字起こしはファイルを参照してください)";
 }

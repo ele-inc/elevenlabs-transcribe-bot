@@ -140,7 +140,7 @@ export async function downloadSlackFile(fileURL: string): Promise<ArrayBuffer> {
 
   const sourceFileArrayBuffer = await response.arrayBuffer();
   console.log("File size:", sourceFileArrayBuffer.byteLength, "bytes");
-  
+
   return sourceFileArrayBuffer;
 }
 
@@ -178,6 +178,6 @@ export async function downloadSlackFileToPath(fileURL: string, filePath: string)
   // Download entire file at once for maximum speed
   const buffer = await response.arrayBuffer();
   await Deno.writeFile(filePath, new Uint8Array(buffer));
-  
+
   console.log(`Download complete: ${buffer.byteLength} bytes (${(buffer.byteLength / (1024 * 1024)).toFixed(2)}MB)`);
 }

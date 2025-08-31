@@ -1,4 +1,4 @@
-import { 
+import {
   APIInteraction,
   InteractionType,
   APIChatInputApplicationCommandInteraction,
@@ -6,18 +6,16 @@ import {
 } from "npm:discord-api-types@0.37.100/v10";
 
 // EdgeRuntime removed for Cloud Run compatibility
-import { 
+import {
   verifyDiscordRequest,
   replyToInteraction,
   deferInteractionReply,
   editInteractionReply,
   downloadDiscordFile,
   getDiscordFileInfo,
-  uploadTranscriptToDiscord,
-  sendDiscordMessage,
 } from "./discord.ts";
 import { transcribeAudioFile } from "./scribe.ts";
-import { parseTranscriptionOptions, extractGoogleDriveUrls, getFileExtensionFromMime } from "./utils.ts";
+import { parseTranscriptionOptions, extractGoogleDriveUrls } from "./utils.ts";
 import { downloadGoogleDriveFile } from "./googledrive.ts";
 
 // Handle Discord interactions
@@ -25,21 +23,21 @@ export async function handleDiscordInteraction(request: Request): Promise<Respon
   try {
     // First, verify the signature for all requests including PING
     const bodyText = await request.text();
-    
+
     // Create a new request with the body for verification
     const clonedRequest = new Request(request.url, {
       method: request.method,
       headers: request.headers,
       body: bodyText,
     });
-    
+
     const isValid = await verifyDiscordRequest(clonedRequest);
-    
+
     if (!isValid) {
       console.error("Invalid Discord request signature");
       return new Response("Unauthorized", { status: 401 });
     }
-    
+
     // Parse the interaction after verification
     const interaction: APIInteraction = JSON.parse(bodyText);
 
@@ -49,11 +47,11 @@ export async function handleDiscordInteraction(request: Request): Promise<Respon
       // Must return exactly { "type": 1 } for Discord verification
       return new Response(
         JSON.stringify({ type: 1 }), // InteractionResponseType.Pong = 1
-        { 
+        {
           status: 200,
-          headers: { 
+          headers: {
             "Content-Type": "application/json",
-          } 
+          }
         }
       );
     }
@@ -61,7 +59,7 @@ export async function handleDiscordInteraction(request: Request): Promise<Respon
   // Handle slash commands
   if (interaction.type === InteractionType.ApplicationCommand) {
     const commandInteraction = interaction as APIChatInputApplicationCommandInteraction;
-    
+
     if (commandInteraction.data.name === "transcribe") {
       return await handleTranscribeCommand(commandInteraction);
     }
@@ -70,9 +68,9 @@ export async function handleDiscordInteraction(request: Request): Promise<Respon
   // Handle message commands (right-click on message -> Apps -> Transcribe)
   if (interaction.type === InteractionType.ApplicationCommand) {
     const messageCommand = interaction as APIMessageApplicationCommandInteraction;
-    
+
     if (messageCommand.data.name === "Transcribe Audio/Video") {
-      return await handleMessageCommand(messageCommand);
+      return handleMessageCommand(messageCommand);
     }
   }
 
@@ -115,12 +113,12 @@ async function handleTranscribeCommand(
       `**使用例:**\n` +
       `/transcribe url:https://drive.google.com/file/d/xxxxx/view options:--num-speakers 3`;
 
-    return replyToInteraction(interaction, usageMessage, true);
+    return replyToInteraction(usageMessage, true);
   }
 
   // Defer the reply immediately (Discord requires response within 3 seconds)
-  const deferResponse = await deferInteractionReply(interaction);
-  
+  const deferResponse = await deferInteractionReply();
+
   // Process in background
   processDiscordTranscription(interaction, {
     url: urlOption?.value as string,
@@ -132,13 +130,13 @@ async function handleTranscribeCommand(
 }
 
 // Handle message context menu command
-async function handleMessageCommand(
+function handleMessageCommand(
   interaction: APIMessageApplicationCommandInteraction
 ): Promise<Response> {
   const message = interaction.data.resolved.messages[interaction.data.target_id];
-  
+
   if (!message) {
-    return replyToInteraction(interaction, "メッセージが見つかりません。", true);
+    return replyToInteraction("メッセージが見つかりません。", true);
   }
 
   // Check for attachments
@@ -152,14 +150,13 @@ async function handleMessageCommand(
 
   if ((!audioVideoAttachments || audioVideoAttachments.length === 0) && googleDriveUrls.length === 0) {
     return replyToInteraction(
-      interaction,
       "このメッセージには音声/動画ファイルまたはGoogle DriveのURLが含まれていません。",
-      true
+      true,
     );
   }
 
   // Defer the reply immediately
-  const deferResponse = await deferInteractionReply(interaction);
+  const deferResponse = deferInteractionReply();
 
   // Process each file/URL in background
   if (googleDriveUrls.length > 0) {
@@ -189,13 +186,11 @@ async function processDiscordTranscription(
     options: any;
   }
 ) {
-  const channelId = interaction.channel?.id || interaction.channel_id || "";
-  
   try {
     // Handle Google Drive URL
     if (params.url) {
       const googleDriveUrls = extractGoogleDriveUrls(params.url);
-      
+
       if (googleDriveUrls.length > 0) {
         await processGoogleDriveTranscription(interaction, googleDriveUrls[0], params.options);
       } else {
@@ -227,15 +222,15 @@ async function processGoogleDriveTranscription(
   options: any
 ) {
   const channelId = interaction.channel?.id || interaction.channel_id || "";
-  
+
   try {
     // Create temporary file path
     const tempDir = await Deno.makeTempDir();
     const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
-    
+
     // Download and get metadata
     const { filename, mimeType } = await downloadGoogleDriveFile(url, tempPath);
-    
+
     // Check if it's an audio/video file
     if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
       await editInteractionReply(
@@ -249,16 +244,16 @@ async function processGoogleDriveTranscription(
       } catch {}
       return;
     }
-    
+
     // Update status
     await editInteractionReply(
       interaction.token,
       `🎵 Google Driveファイル "${filename}" を文字起こし中...`
     );
-    
+
     // Transcribe
     const fileURL = `file://${tempPath}`;
-    
+
     await transcribeAudioFile({
       fileURL,
       fileType: mimeType,
@@ -272,7 +267,7 @@ async function processGoogleDriveTranscription(
       tempPath,
       platform: "discord",
     });
-    
+
     // Final success message
     await editInteractionReply(
       interaction.token,
@@ -294,28 +289,28 @@ async function processDiscordAttachment(
   options: any
 ) {
   const channelId = interaction.channel?.id || interaction.channel_id || "";
-  
+
   try {
     // Download the file
     const fileData = await downloadDiscordFile(attachment.url);
-    
+
     // Create temporary file
     const tempDir = await Deno.makeTempDir();
     const fileInfo = getDiscordFileInfo(attachment.url);
     const tempPath = `${tempDir}/${fileInfo.name}`;
-    
+
     // Write to temp file
     await Deno.writeFile(tempPath, fileData);
-    
+
     // Update status
     await editInteractionReply(
       interaction.token,
       `🎵 "${attachment.filename}" を文字起こし中...`
     );
-    
+
     // Transcribe
     const fileURL = `file://${tempPath}`;
-    
+
     await transcribeAudioFile({
       fileURL,
       fileType: attachment.content_type || "",
@@ -328,13 +323,13 @@ async function processDiscordAttachment(
       tempPath,
       platform: "discord",
     });
-    
+
     // Clean up
     try {
       await Deno.remove(tempPath);
       await Deno.remove(tempDir);
     } catch {}
-    
+
     // Final success message
     await editInteractionReply(
       interaction.token,
