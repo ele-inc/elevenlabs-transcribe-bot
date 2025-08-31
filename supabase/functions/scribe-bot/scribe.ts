@@ -10,6 +10,8 @@ import {
   extractSentences,
   groupBySpeaker,
   createTranscriptionHeader,
+  convertVideoToAudio,
+  isVideoFile,
 } from "./utils.ts";
 import {
   sendSlackMessage,
@@ -61,6 +63,8 @@ export async function transcribeAudioFile({
   let languageCode: string | null = null;
   let errorMsg: string | null = null;
   let tempFilePath: string | null = null;
+  let audioFilePath: string | null = null;
+  let originalVideoPath: string | null = null;
 
   console.log("fileURL", fileURL, "scribe called");
   console.log("fileType (MIME):", fileType);
@@ -79,6 +83,22 @@ export async function transcribeAudioFile({
 
       console.log("downloading file to temp path:", tempFilePath);
       await downloadSlackFileToPath(fileURL, tempFilePath);
+    }
+
+    // Check if the file is a video and convert to MP3 if needed
+    if (isVideoFile(fileType)) {
+      console.log("Detected video file, converting to MP3...");
+      originalVideoPath = tempFilePath;
+      audioFilePath = await convertVideoToAudio(tempFilePath);
+      tempFilePath = audioFilePath;
+      
+      // Delete the original video file after conversion
+      try {
+        console.log("Deleting original video file:", originalVideoPath);
+        await Deno.remove(originalVideoPath);
+      } catch (deleteError) {
+        console.log("Warning: Could not delete original video file:", deleteError instanceof Error ? deleteError.message : String(deleteError));
+      }
     }
 
     const fileInfo = await Deno.stat(tempFilePath);
@@ -107,8 +127,10 @@ export async function transcribeAudioFile({
     const fileData = await Deno.readFile(tempFilePath);
     file.close();
 
+    // Use the appropriate MIME type for the blob
+    const blobType = isVideoFile(fileType) ? "audio/mpeg" : fileType;
     const fileBlob = new Blob([fileData], {
-      type: fileType,
+      type: blobType,
     });
 
     console.log("Sending to ElevenLabs API...");
@@ -197,39 +219,61 @@ export async function transcribeAudioFile({
       );
     }
   } finally {
-    if (tempFilePath && !isGoogleDrive) {
-      // Clean up Slack-downloaded files
+    // Clean up audio file if it was created from video conversion
+    if (audioFilePath) {
       try {
-        console.log("cleaning up temp file:", tempFilePath);
-        await Deno.remove(tempFilePath);
-        const tempDir = tempFilePath.substring(
+        console.log("cleaning up converted audio file:", audioFilePath);
+        await Deno.remove(audioFilePath);
+        const audioDir = audioFilePath.substring(
           0,
-          tempFilePath.lastIndexOf("/"),
+          audioFilePath.lastIndexOf("/"),
         );
         try {
-          await Deno.remove(tempDir);
+          await Deno.remove(audioDir);
         } catch {
           // Ignore error if directory is not empty or doesn't exist
         }
       } catch (cleanupError) {
-        console.log("Error cleaning up temp file:", cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
+        console.log("Error cleaning up audio file:", cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
       }
-    } else if (tempFilePath && isGoogleDrive) {
-      // Clean up Google Drive downloaded files
-      try {
-        console.log("cleaning up Google Drive temp file:", tempFilePath);
-        await Deno.remove(tempFilePath);
-        const tempDir = tempFilePath.substring(
-          0,
-          tempFilePath.lastIndexOf("/"),
-        );
+    }
+    
+    // Clean up original temp file if no audio conversion was done
+    if (tempFilePath && !audioFilePath) {
+      if (!isGoogleDrive) {
+        // Clean up Slack-downloaded files
         try {
-          await Deno.remove(tempDir);
-        } catch {
-          // Ignore error if directory is not empty or doesn't exist
+          console.log("cleaning up temp file:", tempFilePath);
+          await Deno.remove(tempFilePath);
+          const tempDir = tempFilePath.substring(
+            0,
+            tempFilePath.lastIndexOf("/"),
+          );
+          try {
+            await Deno.remove(tempDir);
+          } catch {
+            // Ignore error if directory is not empty or doesn't exist
+          }
+        } catch (cleanupError) {
+          console.log("Error cleaning up temp file:", cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
         }
-      } catch (cleanupError) {
-        console.log("Error cleaning up Google Drive temp file:", cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
+      } else {
+        // Clean up Google Drive downloaded files
+        try {
+          console.log("cleaning up Google Drive temp file:", tempFilePath);
+          await Deno.remove(tempFilePath);
+          const tempDir = tempFilePath.substring(
+            0,
+            tempFilePath.lastIndexOf("/"),
+          );
+          try {
+            await Deno.remove(tempDir);
+          } catch {
+            // Ignore error if directory is not empty or doesn't exist
+          }
+        } catch (cleanupError) {
+          console.log("Error cleaning up Google Drive temp file:", cleanupError instanceof Error ? cleanupError.message : String(cleanupError));
+        }
       }
     }
   }

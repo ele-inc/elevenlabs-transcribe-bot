@@ -1,5 +1,8 @@
 FROM denoland/deno:2.4.5
 
+# Install ffmpeg for video to audio conversion
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy dependency files
