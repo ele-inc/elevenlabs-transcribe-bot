@@ -5,7 +5,7 @@ export
 # Cloud Run deployment
 deploy:
 	@echo "🚀 Deploying to Cloud Run..."
-	@./deploy-with-env.sh
+	@./scripts/deploy.sh
 
 # Local development
 dev:

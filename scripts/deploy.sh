@@ -1,80 +1,29 @@
 #!/bin/bash
 
-# Cloud Run Deployment Script for ElevenLabs Scribe Bot
+echo "🚀 Deploying with all environment variables and CPU optimization..."
 
-set -e
+# Load environment variables from .env file
+source .env
 
-# Configuration
-PROJECT_ID=${GCP_PROJECT_ID:-"your-project-id"}
-REGION=${GCP_REGION:-"asia-northeast1"}
-SERVICE_NAME="scribe-bot"
+# Extract private key from JSON
+GOOGLE_PRIVATE_KEY=$(echo "$GOOGLE_SERVICE_ACCOUNT_KEY" | python3 -c "import sys, json; print(json.load(sys.stdin)['private_key'])")
 
-echo "🚀 Deploying ElevenLabs Scribe Bot to Cloud Run..."
-echo "Project: $PROJECT_ID"
-echo "Region: $REGION"
-echo ""
+# Deploy with all environment variables and CPU optimization
+gcloud run deploy scribe-bot \
+  --source . \
+  --region=asia-northeast1 \
+  --memory=4Gi \
+  --cpu=2 \
+  --timeout=3600 \
+  --no-allow-unauthenticated \
+  --execution-environment=gen2 \
+  --cpu-boost \
+  --no-cpu-throttling \
+  --min-instances=0 \
+  --max-instances=50 \
+  --port=8080 \
+  --set-env-vars="ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY,SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN,FUNCTION_SECRET=$FUNCTION_SECRET,DISCORD_BOT_TOKEN=$DISCORD_BOT_TOKEN,DISCORD_PUBLIC_KEY=$DISCORD_PUBLIC_KEY,DISCORD_APPLICATION_ID=$DISCORD_APPLICATION_ID,GCP_PROJECT_ID=$GCP_PROJECT_ID,GOOGLE_CLIENT_EMAIL=$GOOGLE_CLIENT_EMAIL,GOOGLE_IMPERSONATE_EMAIL=$GOOGLE_IMPERSONATE_EMAIL,GOOGLE_PRIVATE_KEY=$GOOGLE_PRIVATE_KEY"
 
-# Check if gcloud is installed
-if ! command -v gcloud &> /dev/null; then
-    echo "❌ gcloud CLI is not installed. Please install it first."
-    exit 1
-fi
-
-# Check if logged in to gcloud
-if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q .; then
-    echo "❌ Not logged in to gcloud. Please run: gcloud auth login"
-    exit 1
-fi
-
-# Set the project
-echo "Setting GCP project..."
-gcloud config set project $PROJECT_ID
-
-# Build and submit using Cloud Build
-echo "Building and deploying with Cloud Build..."
-gcloud builds submit --config cloudbuild.yaml .
-
-# Set environment variables
-echo ""
-echo "📝 Setting environment variables..."
-echo "Please run ONE of the following commands to set your environment variables:"
-echo ""
-echo "Option 1: Basic setup (Slack + ElevenLabs only)"
-echo "================================================"
-echo "gcloud run services update $SERVICE_NAME \\"
-echo "  --region $REGION \\"
-echo "  --set-env-vars \\"
-echo "    ELEVENLABS_API_KEY=your-key,\\"
-echo "    SLACK_BOT_TOKEN=xoxb-your-token"
-echo ""
-echo "Option 2: Full setup (All services)"
-echo "===================================="
-echo "gcloud run services update $SERVICE_NAME \\"
-echo "  --region $REGION \\"
-echo "  --set-env-vars \\"
-echo "    ELEVENLABS_API_KEY=your-key,\\"
-echo "    SLACK_BOT_TOKEN=xoxb-your-token,\\"
-echo "    DISCORD_APPLICATION_ID=your-id,\\"
-echo "    DISCORD_PUBLIC_KEY=your-key,\\"
-echo "    DISCORD_BOT_TOKEN=your-token,\\"
-echo "    SUPABASE_URL=https://your-project.supabase.co,\\"
-echo "    SUPABASE_SERVICE_ROLE_KEY=your-service-key,\\"
-echo "    GOOGLE_SERVICE_ACCOUNT_KEY='{\"type\":\"service_account\",...}'"
-echo ""
-echo "📚 See ENV_VARS.md for detailed configuration instructions"
-echo ""
-
-# Get the service URL
-echo "Getting service URL..."
-SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)')
-
-echo ""
-echo "✅ Deployment complete!"
-echo "Service URL: $SERVICE_URL"
-echo ""
-echo "📌 Next steps:"
-echo "1. Set environment variables using the command above"
-echo "2. Update Slack app configuration:"
-echo "   - Event Subscriptions URL: ${SERVICE_URL}/slack/events"
-echo "3. Update Discord app configuration:"
-echo "   - Interactions Endpoint URL: ${SERVICE_URL}/discord/interactions"
+echo "✅ Deployed with all environment variables"
+echo "Service URL:"
+gcloud run services describe scribe-bot --region=asia-northeast1 --format="value(status.url)"
