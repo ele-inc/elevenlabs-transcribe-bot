@@ -114,9 +114,11 @@ function handleTranscribeCommand(
       `• \`--no-diarize\`: 話者識別を無効化\n` +
       `• \`--no-timestamp\`: タイムスタンプを非表示\n` +
       `• \`--no-audio-events\`: 音声イベントのタグを無効化\n` +
-      `• \`--num-speakers <数>\`: 話者数を指定（デフォルト: 2）\n\n` +
+      `• \`--num-speakers <数>\`: 話者数を指定（デフォルト: 2）\n` +
+      `• \`--speaker-names "<名前1>,<名前2>"\`: 話者名を指定（AIが自動判定）\n\n` +
       `**使用例:**\n` +
-      `/transcribe url:https://drive.google.com/file/d/xxxxx/view options:--num-speakers 3`;
+      `/transcribe url:https://drive.google.com/file/d/xxxxx/view options:--num-speakers 3\n` +
+      `/transcribe file:<ファイル> options:--speaker-names "田中,山田"`;
 
     return replyToInteraction(usageMessage, true);
   }

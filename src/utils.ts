@@ -16,11 +16,19 @@ export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptio
     }
   }
 
+  // Parse speaker names
+  let speakerNames: string[] | undefined;
+  const namesMatch = text.match(/--speaker-names\s+"([^"]+)"/);
+  if (namesMatch) {
+    speakerNames = namesMatch[1].split(',').map(name => name.trim());
+  }
+
   return {
     diarize,
     showTimestamp: !text.includes("--no-timestamp"),
     tagAudioEvents: !text.includes("--no-audio-events"),
     ...(numSpeakers ? { numSpeakers } : {}),
+    ...(speakerNames ? { speakerNames } : {}),
   };
 };
 
