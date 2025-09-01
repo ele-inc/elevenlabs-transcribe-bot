@@ -31,10 +31,10 @@ export async function transcribeViaTmpFile(
   filename?: string
 ): Promise<TranscriptionResult> {
   // 1) /tmpにスプール（メモリ常数）
-  const tmpFileName = audio_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3;
-  const tmpPath = /tmp/${tmpFileName};
+  const tmpFileName = `audio_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`;
+  const tmpPath = `/tmp/${tmpFileName}`;
 
-  console.log(Spooling audio stream to tmp file: ${tmpPath});
+  console.log(`Spooling audio stream to tmp file: ${tmpPath}`);
 
   // ストリームを/tmpファイルに書き込み
   const file = await Deno.open(tmpPath, { create: true, write: true, truncate: true });
@@ -54,12 +54,12 @@ export async function transcribeViaTmpFile(
 
       // 10MBごとに進捗表示
       if (totalBytes % (10 * 1024 * 1024) < value.length) {
-        console.log(Spooled to tmp: ${(totalBytes / 1024 / 1024).toFixed(2)}MB);
+        console.log(`Spooled to tmp: ${(totalBytes / 1024 / 1024).toFixed(2)}MB`);
       }
     }
 
     await writer.close();
-    console.log(Total audio spooled: ${(totalBytes / 1024 / 1024).toFixed(2)}MB);
+    console.log(`Total audio spooled: ${(totalBytes / 1024 / 1024).toFixed(2)}MB`);
   } catch (error) {
     file.close();
     // クリーンアップ
@@ -71,96 +71,96 @@ export async function transcribeViaTmpFile(
     // 2) ファイルサイズを取得
     const fileInfo = await Deno.stat(tmpPath);
     const fileSize = fileInfo.size;
-    console.log(Tmp file size: ${(fileSize / 1024 / 1024).toFixed(2)}MB);
+    console.log(`Tmp file size: ${(fileSize / 1024 / 1024).toFixed(2)}MB`);
 
-    // 3) 手組みのmultipart/form-dataでストリーミング送信
-    console.log("Sending audio to ElevenLabs API via multipart stream...");
+    // 3) 手組みのmultipart/form-dataで送信（Content-Length付き）
+    console.log("Preparing multipart request with Content-Length...");
 
-    // boundaryを生成
+    // …前段は同じ（/tmpへスプール完了、fileSize取得までOK）…
+
+    // 1) 前後の部品（CRLFは \r\n 厳守）
     const boundary = "--------------------------" + crypto.randomUUID().replace(/-/g, "");
-    const encoder = new TextEncoder();
+    const enc = new TextEncoder();
+    const lang = "ja";  // languageCodeは常にjaを使用
+    const safeName = (filename || "audio.mp3").replace(/[\r\n\t]/g, "_");
 
-    // multipartのフィールドを構築
-    let preamble = --${boundary}\r\n;
-    preamble += Content-Disposition: form-data; name="model_id"\r\n\r\n;
-    preamble += scribe_v1\r\n;
+    let preamble = `--${boundary}\r\n` +
+                  `Content-Disposition: form-data; name="model_id"\r\n\r\n` +
+                  `scribe_v1\r\n` +
+                  `--${boundary}\r\n` +
+                  `Content-Disposition: form-data; name="language_code"\r\n\r\n` +
+                  `${lang}\r\n`;
 
-    // language_codeフィールド
-    preamble += --${boundary}\r\n;
-    preamble += Content-Disposition: form-data; name="language_code"\r\n\r\n;
-    preamble += ja\r\n;
-
-    // オプションフィールドを追加
     if (options.diarize !== undefined) {
-      preamble += --${boundary}\r\n;
-      preamble += Content-Disposition: form-data; name="diarize"\r\n\r\n;
-      preamble += ${options.diarize}\r\n;
+      preamble += `--${boundary}\r\n` +
+                  `Content-Disposition: form-data; name="diarize"\r\n\r\n` +
+                  `${String(options.diarize)}\r\n`;
     }
-
     if (options.tagAudioEvents !== undefined) {
-      preamble += --${boundary}\r\n;
-      preamble += Content-Disposition: form-data; name="tag_audio_events"\r\n\r\n;
-      preamble += ${options.tagAudioEvents}\r\n;
+      preamble += `--${boundary}\r\n` +
+                  `Content-Disposition: form-data; name="tag_audio_events"\r\n\r\n` +
+                  `${String(options.tagAudioEvents)}\r\n`;
     }
-
     if (options.numSpeakers !== undefined) {
-      preamble += --${boundary}\r\n;
-      preamble += Content-Disposition: form-data; name="num_speakers"\r\n\r\n;
-      preamble += ${options.numSpeakers}\r\n;
+      preamble += `--${boundary}\r\n` +
+                  `Content-Disposition: form-data; name="num_speakers"\r\n\r\n` +
+                  `${String(options.numSpeakers)}\r\n`;
     }
 
-    // ファイルフィールドのヘッダー
-    preamble += --${boundary}\r\n;
-    preamble += Content-Disposition: form-data; name="file"; filename="${filename || "audio.mp3"}"\r\n;
-    preamble += Content-Type: audio/mpeg\r\n\r\n;
+    // file パートのヘッダ
+    preamble += `--${boundary}\r\n` +
+                `Content-Disposition: form-data; name="file"; filename="${safeName}"\r\n` +
+                `Content-Type: audio/mpeg\r\n\r\n`;
 
-    const epilogue = \r\n--${boundary}--\r\n;
+    const epilogue = `\r\n--${boundary}--\r\n`;
 
-    // Web ReadableStreamを作成（チャンク送信）
+    const preambleBytes = enc.encode(preamble);
+    const epilogueBytes = enc.encode(epilogue);
+
+    // 2) Content-Length を計算（BigIntで安全に）
+    const totalLen = BigInt(preambleBytes.byteLength) + BigInt(fileSize) + BigInt(epilogueBytes.byteLength);
+
+    // 3) 手組み ReadableStream（※ファイル本体は読み流す＝メモリ一定）
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          // 1) プレアンブルを送信
-          controller.enqueue(encoder.encode(preamble));
+          controller.enqueue(preambleBytes);
 
-          // 2) ファイル本体をチャンクで送信
-          const file = await Deno.open(tmpPath, { read: true });
+          const fh = await Deno.open(tmpPath, { read: true });
           try {
-            const buffer = new Uint8Array(64 * 1024); // 64KB chunks
+            const buf = new Uint8Array(64 * 1024);
             while (true) {
-              const bytesRead = await file.read(buffer);
-              if (bytesRead === null) break;
-              controller.enqueue(bytesRead === buffer.length ? buffer : buffer.subarray(0, bytesRead));
+              const n = await fh.read(buf);
+              if (n === null) break;
+              controller.enqueue(n === buf.length ? buf : buf.subarray(0, n));
             }
-          } finally {
-            file.close();
-          }
+          } finally { try { fh.close(); } catch {} }
 
-          // 3) エピローグを送信
-          controller.enqueue(encoder.encode(epilogue));
+          controller.enqueue(epilogueBytes);
           controller.close();
-        } catch (error) {
-          controller.error(error);
+        } catch (e) {
+          controller.error(e);
         }
       }
     });
 
-    // API呼び出し
-    const response = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+    // 4) 送信（Content-Length 明示、Accept 明示）
+    const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
       method: "POST",
       headers: {
         "xi-api-key": config.elevenLabsApiKey,
-        "Content-Type": multipart/form-data; boundary=${boundary},
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Accept": "application/json",
+        "Content-Length": totalLen.toString(),
       },
       body: stream,
     });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      throw new Error(ElevenLabs API failed: ${response.status} ${response.statusText} - ${errorText});
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(`ElevenLabs API failed: ${res.status} ${res.statusText} - ${t}`);
     }
 
-    const scribeResult = await response.json();
+    const scribeResult = await res.json();
 
     // 4) 結果の処理
     const words: WordItem[] | undefined = scribeResult.words;
@@ -172,12 +172,12 @@ export async function transcribeViaTmpFile(
       transcript = grouped
         .map((u) => {
           const speakerLabel = typeof u.speaker === "number"
-            ? speaker_${u.speaker}
-            : ${u.speaker};
+            ? `speaker_${u.speaker}`
+            : `${u.speaker}`;
           if (options.showTimestamp) {
-            return ${formatTimestamp(u.start)} ${speakerLabel}: ${u.text.trim()};
+            return `${formatTimestamp(u.start)} ${speakerLabel}: ${u.text.trim()}`;
           } else {
-            return ${speakerLabel}: ${u.text.trim()};
+            return `${speakerLabel}: ${u.text.trim()}`;
           }
         })
         .join("\n");
@@ -186,7 +186,7 @@ export async function transcribeViaTmpFile(
       transcript = sentences
         .map((s) => {
           if (options.showTimestamp) {
-            return ${formatTimestamp(s.start)} ${s.text};
+            return `${formatTimestamp(s.start)} ${s.text}`;
           } else {
             return s.text;
           }
@@ -220,9 +220,9 @@ export async function transcribeViaTmpFile(
     // 5) 後片付け（必ず実行）
     try {
       await Deno.remove(tmpPath);
-      console.log(Cleaned up tmp file: ${tmpPath});
+      console.log(`Cleaned up tmp file: ${tmpPath}`);
     } catch (error) {
-      console.error(Failed to remove tmp file ${tmpPath}:, error);
+      console.error(`Failed to remove tmp file ${tmpPath}:`, error);
     }
   }
 }
@@ -246,7 +246,7 @@ export async function transcribeGoogleDriveStream(
 
   // ファイルメタデータを取得
   const metadata = await streamer.getFileMetadata(fileId);
-  console.log(Processing: ${metadata.name} (${metadata.mimeType}));
+  console.log(`Processing: ${metadata.name} (${metadata.mimeType})`);
 
   let audioStream: ReadableStream<Uint8Array>;
   let processingDone: Promise<void>;
@@ -263,7 +263,7 @@ export async function transcribeGoogleDriveStream(
     audioStream = result.stream;
     processingDone = result.done;
   } else {
-    throw new Error(Unsupported file type: ${metadata.mimeType});
+    throw new Error(`Unsupported file type: ${metadata.mimeType}`);
   }
 
   // tmpファイル経由で文字起こし
