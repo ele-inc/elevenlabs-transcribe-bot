@@ -67,31 +67,19 @@ export class GoogleDriveStreamer {
     // ffmpegプロセスを起動（URLを直接指定）
     const proc = new Deno.Command("ffmpeg", {
       args: [
-        "-hide_banner", "-loglevel", "verbose", "-progress", "-", "-stats", "-nostdin",  // 詳細なログと進捗を表示
+        "-hide_banner", "-loglevel", "error", "-nostdin", "-xerror",
         // HTTPヘッダーでアクセストークンを渡す
         "-headers", `Authorization: Bearer ${token}`,
         // ネットワークタイムアウトを60秒に設定
         "-rw_timeout", "60000000",
-        // バッファサイズを制限（重要！）
-        "-http_persistent", "0",  // HTTP接続を再利用しない
-        "-reconnect", "1",        // 接続が切れたら再接続
-        "-reconnect_streamed", "1", // ストリーミング時も再接続
-        // MP4の解析は最小限に
-        "-probesize", "10M",      // 10MBに削減
-        "-analyzeduration", "10M", // 10秒に削減
         // より高速な処理のための設定
         "-threads", "0",          // 自動的に最適なスレッド数を使用
-        // 入力フォーマットを指定（ストリーミング対応）
-        "-f", "mp4",
         // Google Drive URLを直接入力
         "-i", mediaUrl,
         "-vn",                    // 動画トラックを無視
-        "-acodec", "libmp3lame",  // MP3エンコーダー
-        "-ab", "128k",            // ビットレート
-        "-ar", "16000",           // サンプリングレート
-        "-ac", "1",               // モノラル
-        "-f", "mp3",              // 出力フォーマット
-        "pipe:1"                  // 標準出力へ
+        "-acodec", "libmp3lame", "-ab", "128k", "-ar", "16000", "-ac", "1",
+        "-f", "mp3", "pipe:1",
+        "-progress", "pipe:2",
       ],
       stdin: "null",  // stdinは使わない
       stdout: "piped",
