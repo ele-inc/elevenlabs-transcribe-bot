@@ -12,7 +12,9 @@
       "Bash(git commit:*)",
       "Bash(chmod:*)",
       "Bash(cat:*)",
-      "Bash(gcloud logging read:*)"
+      "Bash(gcloud logging read:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)"
     ],
     "deny": [],
     "ask": []
