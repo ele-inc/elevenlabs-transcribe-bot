@@ -1,4 +1,3 @@
-// Removed Supabase Edge Runtime dependency for Cloud Run
 import { handleDiscordInteraction } from "./discord-handler.ts";
 import { handleSlackEvents } from "./slack-handler.ts";
 import { config } from "./config.ts";
