@@ -16,11 +16,13 @@ export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptio
     }
   }
 
-  // Parse speaker names
+  // Parse speaker names (supports both quoted and unquoted format)
   let speakerNames: string[] | undefined;
-  const namesMatch = text.match(/--speaker-names\s+"([^"]+)"/);
+  const namesMatch = text.match(/--speaker-names\s+(?:"([^"]+)"|([^-]+?)(?:\s+--|\s*$))/);
   if (namesMatch) {
-    speakerNames = namesMatch[1].split(',').map(name => name.trim());
+    const names = namesMatch[1] || namesMatch[2];
+    // Split by both full-width and half-width comma
+    speakerNames = names.trim().split(/[,，]/).map(name => name.trim());
   }
 
   return {
