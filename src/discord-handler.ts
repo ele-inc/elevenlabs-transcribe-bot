@@ -274,7 +274,7 @@ async function processGoogleDriveTranscription(
 
     // Initialize Google Drive streamer
     const streamer = new GoogleDriveStreamer();
-    
+
     // Get file metadata
     const metadata = await streamer.getFileMetadata(fileId);
     const { name: filename, mimeType } = metadata;
@@ -291,7 +291,7 @@ async function processGoogleDriveTranscription(
     // Update status
     await editInteractionReply(
       interaction.token,
-      `🎵 Google Driveファイル "${filename}" をストリーミングで文字起こし中...`
+      `🎵 Google Driveファイル "${filename}" を文字起こし中...`
     );
 
     // Get audio stream (converts video to audio if needed)
@@ -319,7 +319,7 @@ async function processGoogleDriveTranscription(
     // Final success message
     await editInteractionReply(
       interaction.token,
-      `✅ "${filename}" の文字起こしが完了しました！（ストリーミング処理）`
+      `✅ "${filename}" の文字起こしが完了しました！`
     );
   } catch (error) {
     console.error("Google Drive streaming error:", error);
