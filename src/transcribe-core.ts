@@ -120,7 +120,7 @@ export async function transcribeFile(
 ): Promise<TranscriptionResult> {
   let processedFilePath = filePath;
   let audioFilePath: string | null = null;
-  
+
   try {
     // Get file info
     const fileInfo = await Deno.stat(filePath);
@@ -131,7 +131,7 @@ export async function transcribeFile(
     // Determine MIME type based on file extension
     const extension = filePath.split('.').pop()?.toLowerCase() || '';
     const mimeType = getMimeType(extension);
-    
+
     // Check if the file is a video and convert to MP3 if needed
     if (isVideoFile(mimeType)) {
       console.log("Detected video file, converting to MP3...");
@@ -147,13 +147,13 @@ export async function transcribeFile(
 
     // Read the processed file (original audio or converted MP3)
     const fileData = await Deno.readFile(processedFilePath);
-    
+
     // Use the appropriate MIME type
     const finalMimeType = audioFilePath ? "audio/mpeg" : mimeType;
-    
+
     // Call the core transcription function
     const result = await transcribeCore(fileData, finalMimeType, options);
-    
+
     return result;
   } finally {
     // Clean up converted audio file if it was created
