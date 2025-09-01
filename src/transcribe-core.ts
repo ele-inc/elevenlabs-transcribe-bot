@@ -23,6 +23,7 @@ export interface TranscriptionResult {
   words?: WordItem[];
 }
 
+
 /**
  * Core transcription function that is platform-independent
  * @param fileData - The audio/video file data as Uint8Array
@@ -122,12 +123,6 @@ export async function transcribeFile(
   let audioFilePath: string | null = null;
 
   try {
-    // Get file info
-    const fileInfo = await Deno.stat(filePath);
-    const fileSizeMB = fileInfo.size / (1024 * 1024);
-    console.log(`File: ${filePath}`);
-    console.log(`File size: ${fileSizeMB.toFixed(2)}MB`);
-
     // Determine MIME type based on file extension
     const extension = filePath.split('.').pop()?.toLowerCase() || '';
     const mimeType = getMimeType(extension);
@@ -138,11 +133,6 @@ export async function transcribeFile(
       audioFilePath = await convertVideoToAudio(filePath);
       processedFilePath = audioFilePath;
       console.log("Conversion complete:", audioFilePath);
-    }
-
-    // Warn about large files
-    if (fileSizeMB > 200) {
-      console.warn(`Warning: Large file detected (${fileSizeMB.toFixed(2)}MB). This may exceed memory limits.`);
     }
 
     // Read the processed file (original audio or converted MP3)

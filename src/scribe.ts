@@ -83,24 +83,6 @@ export async function transcribeAudioFile({
       await Deno.remove(originalVideoPath);
     }
 
-    const fileInfo = await Deno.stat(tempFilePath);
-    const fileSizeMB = fileInfo.size / (1024 * 1024);
-    console.log(`File size: ${fileSizeMB.toFixed(2)}MB`);
-
-    // Warn about large files
-    if (fileSizeMB > 200) {
-      console.warn(`Warning: Large file detected (${fileSizeMB.toFixed(2)}MB). This may exceed memory limits.`);
-
-      if (platform === "slack") {
-        await sendSlackMessage(
-          channelId,
-          `⚠️ 大きなファイル（${fileSizeMB.toFixed(0)}MB）を処理中です。メモリ制限により失敗する可能性があります。`,
-          timestamp,
-        );
-      }
-      // Discord warnings are handled in discord-handler.ts
-    }
-
     console.log("calling transcribe-core with options:", options);
 
     // Read file into memory

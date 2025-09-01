@@ -138,14 +138,13 @@ async function main() {
       Deno.exit(1);
     }
 
-    // Debug: Check if API key is loaded
+    // Check if API key is loaded
     const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
     if (!apiKey) {
       console.error("Error: ELEVENLABS_API_KEY not found in environment variables");
       console.error("Please ensure .env file exists and contains ELEVENLABS_API_KEY");
       Deno.exit(1);
     }
-    console.log(`API Key loaded: ${apiKey.substring(0, 10)}...`);
 
     console.log(`Transcribing: ${filePath}`);
     console.log("Options:", {
