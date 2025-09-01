@@ -12,8 +12,8 @@ GOOGLE_PRIVATE_KEY=$(echo "$GOOGLE_SERVICE_ACCOUNT_KEY" | python3 -c "import sys
 gcloud run deploy scribe-bot \
   --source . \
   --region=asia-northeast1 \
-  --memory=32Gi \
-  --cpu=8 \
+  --memory=2Gi \
+  --cpu=1 \
   --timeout=3600 \
   --no-allow-unauthenticated \
   --execution-environment=gen2 \
