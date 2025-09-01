@@ -86,7 +86,7 @@ export class GoogleDriveStreamer {
           }
           
           const totalTime = (performance.now() - startTime) / 1000;
-          const totalMB = downloadedBytes / (1024 / 1024);
+          const totalMB = downloadedBytes / (1024 * 1024);
           console.log(`Streaming complete: ${totalMB.toFixed(2)}MB in ${totalTime.toFixed(2)}s`);
           
           controller.close();
@@ -149,31 +149,71 @@ export class GoogleDriveStreamer {
     const writer = process.stdin.getWriter();
     const reader = videoStream.getReader();
 
-    (async () => {
+    // パイプ処理を待機する必要がある
+    const pipePromise = (async () => {
       try {
         let totalBytes = 0;
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log("Finished reading from Google Drive");
+            break;
+          }
           
           await writer.write(value);
           totalBytes += value.length;
           
           // 定期的に進捗表示
-          if (totalBytes % (10 * 1024 * 1024) === 0) {
+          if (totalBytes % (10 * 1024 * 1024) < value.length) {
             console.log(`Piped ${(totalBytes / 1024 / 1024).toFixed(0)}MB to ffmpeg`);
           }
         }
         console.log(`Total piped to ffmpeg: ${(totalBytes / 1024 / 1024).toFixed(2)}MB`);
       } catch (error) {
         console.error("Error piping to ffmpeg:", error);
+        throw error;
       } finally {
-        await writer.close();
+        try {
+          await writer.close();
+          console.log("Closed ffmpeg stdin");
+        } catch (e) {
+          console.error("Error closing writer:", e);
+        }
       }
     })();
 
-    // ffmpegの出力（MP3音声）をReadableStreamとして返す
-    return process.stdout;
+    // ffmpegの処理完了を確実に待つ
+    const audioChunks: Uint8Array[] = [];
+    const outputReader = process.stdout.getReader();
+    
+    try {
+      while (true) {
+        const { done, value } = await outputReader.read();
+        if (done) break;
+        audioChunks.push(value);
+      }
+    } finally {
+      outputReader.releaseLock();
+    }
+
+    // パイプ処理の完了を待つ
+    await pipePromise;
+    
+    // ffmpegプロセスの終了を待つ
+    const status = await process.status;
+    if (!status.success) {
+      throw new Error(`ffmpeg failed with code ${status.code}`);
+    }
+
+    // 音声データをReadableStreamとして返す
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of audioChunks) {
+          controller.enqueue(chunk);
+        }
+        controller.close();
+      }
+    });
   }
 
   /**
