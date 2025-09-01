@@ -45,6 +45,22 @@ logs:
 	@echo "📜 Recent logs:"
 	@gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=scribe-bot" --limit 50 --format json | jq -r '.[] | "\(.timestamp): \(.textPayload // .jsonPayload.message)"'
 
+# Local transcription
+transcribe:
+	@if [ -z "$(FILE)" ]; then \
+		echo "Error: FILE parameter is required"; \
+		echo "Usage: make transcribe FILE=path/to/audio.mp3 [ARGS='--option value']"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make transcribe FILE=audio.mp3"; \
+		echo "  make transcribe FILE=video.mp4 ARGS='--output transcript.txt'"; \
+		echo "  make transcribe FILE=meeting.m4a ARGS='--speaker-names \"Alice,Bob\"'"; \
+		echo "  make transcribe FILE=audio.wav ARGS='--no-diarize --format json'"; \
+		exit 1; \
+	fi
+	@echo "🎙️ Transcribing file: $(FILE)"
+	@deno run --allow-all src/cli.ts $(FILE) $(ARGS)
+
 # Help
 help:
 	@echo "Available commands:"
@@ -56,4 +72,6 @@ help:
 	@echo "  make status      - Show Cloud Run deployment status"
 	@echo "  make env         - Show current environment variables"
 	@echo "  make logs        - Show recent Cloud Run logs"
+	@echo "  make transcribe  - Transcribe audio/video files locally"
+	@echo "                     Usage: make transcribe FILE=path/to/file [ARGS='options']"
 	@echo "  make help        - Show this help message"

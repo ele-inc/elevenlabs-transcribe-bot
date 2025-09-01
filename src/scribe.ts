@@ -1,14 +1,9 @@
-import { ElevenLabsClient } from "npm:elevenlabs@1.59.0";
 import {
   TranscriptionOptions,
-  WordItem,
   TranscriptionLog
 } from "./types.ts";
 import {
   getFileExtensionFromMime,
-  formatTimestamp,
-  extractSentences,
-  groupBySpeaker,
   createTranscriptionHeader,
   convertVideoToAudio,
   isVideoFile,
@@ -22,12 +17,7 @@ import {
   sendDiscordMessage,
   uploadTranscriptToDiscord,
 } from "./discord.ts";
-import { config } from "./config.ts";
-import { identifySpeakers, replaceSpeakerLabels } from "./openai-client.ts";
-
-const elevenlabs = new ElevenLabsClient({
-  apiKey: config.elevenLabsApiKey,
-});
+import { transcribeCore } from "./transcribe-core.ts";
 
 
 export async function transcribeAudioFile({
@@ -111,77 +101,21 @@ export async function transcribeAudioFile({
       // Discord warnings are handled in discord-handler.ts
     }
 
-    console.log("calling elevenlabs with options:", options);
+    console.log("calling transcribe-core with options:", options);
 
-    // Read file into memory only if it's small enough
-    // For large files, we need a different approach
-    const file = await Deno.open(tempFilePath, { read: true });
+    // Read file into memory
     const fileData = await Deno.readFile(tempFilePath);
-    file.close();
 
-    // Use the appropriate MIME type for the blob
-    const blobType = isVideoFile(fileType) ? "audio/mpeg" : fileType;
-    const fileBlob = new Blob([fileData], {
-      type: blobType,
-    });
+    // Use the appropriate MIME type
+    const mimeType = isVideoFile(fileType) ? "audio/mpeg" : fileType;
 
-    console.log("Sending to ElevenLabs API...");
-    const scribeResult = await elevenlabs.speechToText.convert({
-      file: fileBlob,
-      model_id: "scribe_v1",
-      tag_audio_events: options.tagAudioEvents,
-      diarize: options.diarize,
-      language_code: "ja",
-      ...(options.diarize && options.numSpeakers ? { num_speakers: options.numSpeakers } : {}),
-    }, { timeoutInSeconds: 180 });
-
-    const words: WordItem[] | undefined = (scribeResult as { words?: WordItem[] }).words;
-
-    if (options.diarize && Array.isArray(words) && words.length > 0) {
-      const grouped = groupBySpeaker(words);
-      transcript = grouped
-        .map((u) => {
-          const speakerLabel = typeof u.speaker === "number"
-            ? `speaker_${u.speaker}`
-            : `${u.speaker}`;
-          if (options.showTimestamp) {
-            return `${formatTimestamp(u.start)} ${speakerLabel}: ${u.text.trim()}`;
-          } else {
-            return `${speakerLabel}: ${u.text.trim()}`;
-          }
-        })
-        .join("\n");
-    } else if (!options.diarize && Array.isArray(words) && words.length > 0) {
-      const sentences = extractSentences(words);
-      transcript = sentences
-        .map((s) => {
-          if (options.showTimestamp) {
-            return `${formatTimestamp(s.start)} ${s.text}`;
-          } else {
-            return s.text;
-          }
-        })
-        .join("\n");
-    } else {
-      const plain = (scribeResult.text || "").trim();
-      transcript = plain.replace(/([。.!！?？])\s*/g, "$1\n").trim();
-    }
-
-    languageCode = (scribeResult as { language_code?: string }).language_code || null;
+    // Call the core transcription function
+    const result = await transcribeCore(fileData, mimeType, options);
+    
+    transcript = result.transcript;
+    languageCode = result.languageCode;
 
     if (transcript) {
-      // Apply speaker name mapping if provided
-      if (options.diarize && options.speakerNames && options.speakerNames.length > 0) {
-        try {
-          console.log("Identifying speakers with names:", options.speakerNames);
-          const speakerMapping = await identifySpeakers(transcript, options.speakerNames);
-          transcript = replaceSpeakerLabels(transcript, speakerMapping);
-          console.log("Speaker labels replaced successfully");
-        } catch (error) {
-          console.error("Failed to identify speakers:", error);
-          // Continue with original transcript if speaker identification fails
-        }
-      }
 
       // Add header with filename if provided
       const finalTranscript = filename
