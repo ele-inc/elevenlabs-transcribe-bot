@@ -145,7 +145,7 @@ export async function transcribeAudioFile({
             ? `speaker_${u.speaker}`
             : `${u.speaker}`;
           if (options.showTimestamp) {
-            return `[${formatTimestamp(u.start)}] ${speakerLabel}: ${u.text.trim()}`;
+            return `${formatTimestamp(u.start)} ${speakerLabel}: ${u.text.trim()}`;
           } else {
             return `${speakerLabel}: ${u.text.trim()}`;
           }
@@ -156,7 +156,7 @@ export async function transcribeAudioFile({
       transcript = sentences
         .map((s) => {
           if (options.showTimestamp) {
-            return `[${formatTimestamp(s.start)}] ${s.text}`;
+            return `${formatTimestamp(s.start)} ${s.text}`;
           } else {
             return s.text;
           }
