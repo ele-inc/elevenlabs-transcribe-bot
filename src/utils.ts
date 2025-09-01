@@ -173,17 +173,17 @@ export const convertVideoToAudio = async (
         "-i", inputPath,
         "-vn",
         "-acodec", "mp3",
-        "-ab", "192k",
-        "-ar", "44100",
+        "-ab", "128k",
+        "-ar", "16000",
         "-y",
         outputPath
       ],
       stdout: "piped",
       stderr: "piped",
     });
-    
+
     const { success, stderr } = await command.output();
-    
+
     if (!success) {
       const errorText = new TextDecoder().decode(stderr);
       throw new Error(`ffmpeg failed: ${errorText}`);
