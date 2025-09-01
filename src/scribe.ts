@@ -23,6 +23,7 @@ import {
   uploadTranscriptToDiscord,
 } from "./discord.ts";
 import { config } from "./config.ts";
+import { identifySpeakers, replaceSpeakerLabels } from "./openai-client.ts";
 
 const elevenlabs = new ElevenLabsClient({
   apiKey: config.elevenLabsApiKey,
@@ -144,7 +145,7 @@ export async function transcribeAudioFile({
             ? `speaker_${u.speaker}`
             : `${u.speaker}`;
           if (options.showTimestamp) {
-            return `[${formatTimestamp(u.start)}] ${speakerLabel}: ${u.text.trim()}`;
+            return `${formatTimestamp(u.start)} ${speakerLabel}: ${u.text.trim()}`;
           } else {
             return `${speakerLabel}: ${u.text.trim()}`;
           }
@@ -155,7 +156,7 @@ export async function transcribeAudioFile({
       transcript = sentences
         .map((s) => {
           if (options.showTimestamp) {
-            return `[${formatTimestamp(s.start)}] ${s.text}`;
+            return `${formatTimestamp(s.start)} ${s.text}`;
           } else {
             return s.text;
           }
@@ -169,6 +170,19 @@ export async function transcribeAudioFile({
     languageCode = (scribeResult as { language_code?: string }).language_code || null;
 
     if (transcript) {
+      // Apply speaker name mapping if provided
+      if (options.diarize && options.speakerNames && options.speakerNames.length > 0) {
+        try {
+          console.log("Identifying speakers with names:", options.speakerNames);
+          const speakerMapping = await identifySpeakers(transcript, options.speakerNames);
+          transcript = replaceSpeakerLabels(transcript, speakerMapping);
+          console.log("Speaker labels replaced successfully");
+        } catch (error) {
+          console.error("Failed to identify speakers:", error);
+          // Continue with original transcript if speaker identification fails
+        }
+      }
+
       // Add header with filename if provided
       const finalTranscript = filename
         ? createTranscriptionHeader(filename) + transcript

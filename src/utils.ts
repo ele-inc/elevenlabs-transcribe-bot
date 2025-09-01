@@ -16,11 +16,21 @@ export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptio
     }
   }
 
+  // Parse speaker names (supports both quoted and unquoted format)
+  let speakerNames: string[] | undefined;
+  const namesMatch = text.match(/--speaker-names\s+(?:"([^"]+)"|([^-]+?)(?:\s+--|\s*$))/);
+  if (namesMatch) {
+    const names = namesMatch[1] || namesMatch[2];
+    // Split by both full-width and half-width comma
+    speakerNames = names.trim().split(/[,，]/).map(name => name.trim());
+  }
+
   return {
     diarize,
     showTimestamp: !text.includes("--no-timestamp"),
     tagAudioEvents: !text.includes("--no-audio-events"),
     ...(numSpeakers ? { numSpeakers } : {}),
+    ...(speakerNames ? { speakerNames } : {}),
   };
 };
 

@@ -50,9 +50,11 @@ export async function handleAppMention(event: SlackEvent) {
       `• \`--no-diarize\`: 話者識別を無効化\n` +
       `• \`--no-timestamp\`: タイムスタンプを非表示\n` +
       `• \`--no-audio-events\`: 音声イベント（拍手、音楽など）のタグを無効化\n` +
-      `• \`--num-speakers <数>\`: 話者数を指定（デフォルト: 2）\n\n` +
+      `• \`--num-speakers <数>\`: 話者数を指定（デフォルト: 2）\n` +
+      `• \`--speaker-names "<名前1>,<名前2>"\`: 話者名を指定（AIが自動判定）\n\n` +
       `*使用例:*\n` +
       `@文字起こしKUN --no-timestamp --num-speakers 3\n` +
+      `@文字起こしKUN --speaker-names "田中,山田"\n` +
       `@文字起こしKUN https://drive.google.com/file/d/xxxxx/view`;
 
     await sendSlackMessage(
@@ -98,6 +100,9 @@ export async function handleAppMention(event: SlackEvent) {
         if (!options.tagAudioEvents) optionInfo.push("音声イベントOFF");
         if (options.diarize && options.numSpeakers && options.numSpeakers !== 2) {
           optionInfo.push(`話者数: ${options.numSpeakers}`);
+        }
+        if (options.speakerNames && options.speakerNames.length > 0) {
+          optionInfo.push(`話者名: ${options.speakerNames.join(", ")}`);
         }
 
         const optionText = optionInfo.length > 0
@@ -149,6 +154,9 @@ export async function handleAppMention(event: SlackEvent) {
         if (!options.tagAudioEvents) optionInfo.push("音声イベントOFF");
         if (options.diarize && options.numSpeakers && options.numSpeakers !== 2) {
           optionInfo.push(`話者数: ${options.numSpeakers}`);
+        }
+        if (options.speakerNames && options.speakerNames.length > 0) {
+          optionInfo.push(`話者名: ${options.speakerNames.join(", ")}`);
         }
 
         const optionText = optionInfo.length > 0

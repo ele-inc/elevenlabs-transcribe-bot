@@ -20,15 +20,19 @@ You can customize the transcription by adding options when mentioning the bot:
 - `--no-timestamp` - Disable timestamps (default: enabled)
 - `--no-audio-events` - Disable audio event detection (default: enabled)
 - `--num-speakers N` - Specify the number of speakers (1-32, default: 2 when diarization is enabled)
+- `--speaker-names "<name1>,<name2>"` - Specify speaker names (AI will automatically identify who is who)
 
 Example:
 ```
 @bot transcribe this file --no-timestamp --no-diarize
 @bot transcribe this file --num-speakers 3
 @bot https://drive.google.com/file/d/xxxxx/view --num-speakers 4
+@bot transcribe this file --speaker-names "田中,山田"
 ```
 
-**Note:** The `--num-speakers` option only works when speaker diarization is enabled (default). If you use `--no-diarize`, the num-speakers setting will be ignored.
+**Note:** 
+- The `--num-speakers` option only works when speaker diarization is enabled (default). If you use `--no-diarize`, the num-speakers setting will be ignored.
+- The `--speaker-names` option uses OpenAI to automatically identify which speaker is which based on the conversation content. You need to set `OPENAI_API_KEY` in your environment variables for this feature to work.
 
 ## Project Structure
 

@@ -38,6 +38,7 @@ export interface TranscriptionOptions {
   showTimestamp: boolean;
   tagAudioEvents: boolean;
   numSpeakers?: number;
+  speakerNames?: string[];
 }
 
 export interface TranscriptionLog {

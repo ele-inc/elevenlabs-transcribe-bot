@@ -31,7 +31,7 @@ const commands = [
       },
       {
         name: "options",
-        description: "オプション (--no-diarize, --no-timestamp, --num-speakers 3 など)",
+        description: "オプション (--no-diarize, --speaker-names \"名前1,名前2\" など)",
         type: 3, // STRING type
         required: false,
       },
