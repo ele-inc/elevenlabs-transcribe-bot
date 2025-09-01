@@ -120,16 +120,22 @@ export async function handleAppMention(event: SlackEvent) {
 
           // Get audio stream (converts video if needed)
           let audioStream: ReadableStream<Uint8Array>;
+          let processingDone: Promise<void>;
+          
           if (mimeType.startsWith("video/")) {
             console.log("Streaming video to audio conversion...");
-            audioStream = await streamer.streamVideoToAudio(fileId);
+            const result = await streamer.streamVideoToAudio(fileId);
+            audioStream = result.stream;
+            processingDone = result.done;
           } else {
             console.log("Streaming audio directly...");
-            audioStream = await streamer.streamAudio(fileId);
+            const result = await streamer.streamAudio(fileId);
+            audioStream = result.stream;
+            processingDone = result.done;
           }
 
-          // Run streaming transcription in the background
-          transcribeAudioFromStream({
+          // Run streaming transcription and wait for both to complete
+          const transcribePromise = transcribeAudioFromStream({
               audioStream,
               fileType: "audio/mpeg", // Always MP3 after conversion
               channelId: event.channel,
@@ -138,7 +144,10 @@ export async function handleAppMention(event: SlackEvent) {
               options,
               filename,
               platform: "slack",
-          }).catch((error) => {
+          });
+          
+          // Wait for both transcription and processing to complete
+          Promise.all([transcribePromise, processingDone]).catch((error) => {
               console.error("Error processing Google Drive stream:", error);
               sendSlackMessage(
                 event.channel,

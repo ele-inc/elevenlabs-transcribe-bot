@@ -296,16 +296,22 @@ async function processGoogleDriveTranscription(
 
     // Get audio stream (converts video to audio if needed)
     let audioStream: ReadableStream<Uint8Array>;
+    let processingDone: Promise<void>;
+    
     if (mimeType.startsWith("video/")) {
       console.log("Streaming video to audio conversion...");
-      audioStream = await streamer.streamVideoToAudio(fileId);
+      const result = await streamer.streamVideoToAudio(fileId);
+      audioStream = result.stream;
+      processingDone = result.done;
     } else {
       console.log("Streaming audio directly...");
-      audioStream = await streamer.streamAudio(fileId);
+      const result = await streamer.streamAudio(fileId);
+      audioStream = result.stream;
+      processingDone = result.done;
     }
 
     // Transcribe from stream
-    await transcribeAudioFromStream({
+    const transcribePromise = transcribeAudioFromStream({
       audioStream,
       fileType: "audio/mpeg", // Always MP3 after conversion
       channelId,
@@ -315,6 +321,9 @@ async function processGoogleDriveTranscription(
       filename,
       platform: "discord",
     });
+
+    // 両方の完了を待つ
+    await Promise.all([transcribePromise, processingDone]);
 
     // Final success message
     await editInteractionReply(
