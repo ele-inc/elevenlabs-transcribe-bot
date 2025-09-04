@@ -19,24 +19,29 @@ export async function identifySpeakers(
 ): Promise<Map<string, string>> {
   const client = getOpenAIClient();
 
-  const prompt = `以下の文字起こし結果を分析して、各話者（speaker_0, speaker_1など）が誰なのかを判定してください。
+  const speakerListString = speakerNames.join(", ");
 
-話者候補:
-${speakerNames.map((name, i) => `- ${name}`).join('\n')}
+  const prompt = `以下の文字起こし結果と話者候補リストを分析し、各話者（例: speaker_0, speaker_1）が誰なのかを特定してください。
 
-文字起こし結果:
+# 話者候補リスト
+${speakerNames.map((name) => `- ${name}`).join("\n")}
+
+# 文字起こし結果
 ${transcript}
 
-各話者の発言内容、話し方、文脈から判断して、以下の形式でJSONを返してください:
-{
-  "speaker_0": "判定した名前",
-  "speaker_1": "判定した名前"
-}
+# 指示とルール
+1. 各話者の発言内容、話し方、文脈から、その話者が「話者候補リスト」の誰に該当するかを判断してください。
+2. **最重要**: JSONの各値は、必ず以下の「話者候補リスト」の中から選択してください。
+   【利用可能な名前: ${speakerListString}】
+3. 「話者候補リスト」に存在しない名前は、たとえ文字起こし中に出現したとしても、絶対に使用してはいけません。
+4. 判定が難しい場合でも、最も可能性が高いと思われる候補を選択してください。
+5. 以下のJSON形式で、説明や他のテキストを一切含めずに出力してください。
 
-注意:
-- 必ず候補の名前から選んでください
-- 判定が難しい場合でも、最も可能性が高い名前を選んでください
-- レスポンスはJSONのみで、説明は不要です`;
+{
+  "speaker_0": "（ここに候補リストから選んだ名前）",
+  "speaker_1": "（ここに候補リストから選んだ名前）"
+}
+`;
 
   try {
     const response = await client.chat.completions.create({
@@ -44,15 +49,16 @@ ${transcript}
       messages: [
         {
           role: "system",
-          content: "あなたは文字起こし結果から話者を特定する専門家です。与えられた候補者リストから、各話者が誰なのかを正確に判定してください。"
+          content:
+            "あなたは、与えられた「話者候補リスト」に厳密に従って、文字起こしから話者を特定する専門家です。候補リストにない名前は絶対に使用してはいけません。",
         },
         {
           role: "user",
-          content: prompt
-        }
+          content: prompt,
+        },
       ],
       temperature: 0.3,
-      response_format: { type: "json_object" }
+      response_format: { type: "json_object" },
     });
 
     const result = response.choices[0].message.content;
