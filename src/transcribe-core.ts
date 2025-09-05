@@ -4,12 +4,10 @@ import {
   WordItem,
 } from "./types.ts";
 import {
-  formatTimestamp,
-  extractSentences,
-  groupBySpeaker,
   isVideoFile,
   convertVideoToAudio,
 } from "./utils.ts";
+import { formatTranscription } from "./lib/transcription-formatter.ts";
 import { identifySpeakers, replaceSpeakerLabels } from "./openai-client.ts";
 import { config } from "./config.ts";
 
@@ -54,35 +52,12 @@ export async function transcribeCore(
   }, { timeoutInSeconds: 180 });
 
   const words: WordItem[] | undefined = (scribeResult as { words?: WordItem[] }).words;
-  let transcript = "";
-
-  // Process transcription based on options
-  if (options.diarize && Array.isArray(words) && words.length > 0) {
-    const grouped = groupBySpeaker(words);
-    transcript = grouped
-      .map((u) => {
-        const speakerLabel = typeof u.speaker === "number"
-          ? `speaker_${u.speaker}`
-          : `${u.speaker}`;
-        if (options.showTimestamp) {
-          return `${formatTimestamp(u.start)} ${speakerLabel}: ${u.text.trim()}`;
-        } else {
-          return `${speakerLabel}: ${u.text.trim()}`;
-        }
-      })
-      .join("\n");
-  } else if (!options.diarize && Array.isArray(words) && words.length > 0) {
-    const sentences = extractSentences(words);
-    transcript = sentences
-      .map((s) => {
-        if (options.showTimestamp) {
-          return `${formatTimestamp(s.start)} ${s.text}`;
-        } else {
-          return s.text;
-        }
-      })
-      .join("\n");
-  } else {
+  
+  // Format transcription using the formatter (before speaker name mapping)
+  let transcript = formatTranscription(words, options, undefined);
+  
+  // Fallback to plain text if no words
+  if (!transcript && !words) {
     const plain = (scribeResult.text || "").trim();
     transcript = plain.replace(/([。.!！?？])\s*/g, "$1\n").trim();
   }
