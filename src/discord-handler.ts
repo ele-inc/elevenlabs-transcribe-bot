@@ -19,8 +19,9 @@ import {
   getDiscordFileInfo,
 } from "./discord.ts";
 import { transcribeAudioFile } from "./scribe.ts";
-import { parseTranscriptionOptions, extractGoogleDriveUrls } from "./utils.ts";
+import { parseTranscriptionOptions, extractGoogleDriveUrls, extractDropboxUrls } from "./utils.ts";
 import { downloadGoogleDriveFile } from "./googledrive.ts";
+import { downloadDropboxFile } from "./dropbox.ts";
 
 // Handle Discord interactions
 export async function handleDiscordInteraction(request: Request): Promise<Response> {
@@ -168,12 +169,14 @@ function handleMessageCommand(
     return mimeType?.startsWith("audio/") || mimeType?.startsWith("video/");
   });
 
-  // Check for Google Drive URLs in message content
+  // Check for Google Drive and Dropbox URLs in message content
   const googleDriveUrls = extractGoogleDriveUrls(message.content || "");
+  const dropboxUrls = extractDropboxUrls(message.content || "");
 
-  if ((!audioVideoAttachments || audioVideoAttachments.length === 0) && googleDriveUrls.length === 0) {
+  if ((!audioVideoAttachments || audioVideoAttachments.length === 0) && 
+      googleDriveUrls.length === 0 && dropboxUrls.length === 0) {
     return replyToInteraction(
-      "このメッセージには音声/動画ファイルまたはGoogle DriveのURLが含まれていません。",
+      "このメッセージには音声/動画ファイル、Google Drive、またはDropboxのURLが含まれていません。",
       true,
     );
   }
@@ -187,6 +190,16 @@ function handleMessageCommand(
       if (googleDriveUrls.length > 0) {
         for (const url of googleDriveUrls) {
           await processGoogleDriveTranscription(interaction, url, {
+            diarize: true,
+            showTimestamp: true,
+            tagAudioEvents: true
+          });
+        }
+      }
+
+      if (dropboxUrls.length > 0) {
+        for (const url of dropboxUrls) {
+          await processDropboxTranscription(interaction, url, {
             diarize: true,
             showTimestamp: true,
             tagAudioEvents: true
@@ -225,16 +238,19 @@ async function processDiscordTranscription(
   }
 ) {
   try {
-    // Handle Google Drive URL
+    // Handle Google Drive or Dropbox URL
     if (params.url) {
       const googleDriveUrls = extractGoogleDriveUrls(params.url);
+      const dropboxUrls = extractDropboxUrls(params.url);
 
       if (googleDriveUrls.length > 0) {
         await processGoogleDriveTranscription(interaction, googleDriveUrls[0], params.options);
+      } else if (dropboxUrls.length > 0) {
+        await processDropboxTranscription(interaction, dropboxUrls[0], params.options);
       } else {
         await editInteractionReply(
           interaction.token,
-          "❌ 有効なGoogle DriveのURLが見つかりません。"
+          "❌ 有効なGoogle DriveまたはDropboxのURLが見つかりません。"
         );
       }
       return;
@@ -314,6 +330,71 @@ async function processGoogleDriveTranscription(
     await editInteractionReply(
       interaction.token,
       `❌ Google Driveファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
+  }
+}
+
+// Process Dropbox file for Discord
+async function processDropboxTranscription(
+  interaction: APIInteraction,
+  url: string,
+  options: TranscriptionOptions
+) {
+  const channelId = interaction.channel?.id || "";
+
+  try {
+    // Create temporary file path
+    const tempDir = await Deno.makeTempDir();
+    const tempPath = `${tempDir}/dropbox_${Date.now()}.tmp`;
+
+    // Download and get metadata
+    const { filename, mimeType } = await downloadDropboxFile(url, tempPath);
+
+    // Check if it's an audio/video file
+    if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
+      await editInteractionReply(
+        interaction.token,
+        `❌ ファイル "${filename}" は音声または動画ファイルではありません。`
+      );
+      // Clean up
+      await Deno.remove(tempPath).catch(() => {});
+      await Deno.remove(tempDir).catch(() => {});
+      return;
+    }
+
+    // Update status
+    await editInteractionReply(
+      interaction.token,
+      `🎵 Dropboxファイル "${filename}" を文字起こし中...`
+    );
+
+    // Transcribe
+    const fileURL = `file://${tempPath}`;
+
+    await transcribeAudioFile({
+      fileURL,
+      fileType: mimeType,
+      duration: 0,
+      channelId,
+      timestamp: interaction.id,
+      userId: interaction.member?.user?.id || interaction.user?.id || "",
+      options,
+      filename,
+      isGoogleDrive: true, // Reuse flag for external file handling
+      tempPath,
+      platform: "discord",
+    });
+
+    // Final success message
+    await editInteractionReply(
+      interaction.token,
+      `✅ "${filename}" の文字起こしが完了しました！`
+    );
+  } catch (error) {
+    console.error("Dropbox processing error:", error);
+    await editInteractionReply(
+      interaction.token,
+      `❌ Dropboxファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }

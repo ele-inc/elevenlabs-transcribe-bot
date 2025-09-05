@@ -1,5 +1,6 @@
 import { TranscriptionOptions, WordItem, Sentence, SpeakerUtterance } from "./types.ts";
 import { isGoogleDriveUrl } from "./googledrive.ts";
+import { isDropboxUrl } from "./dropbox.ts";
 
 export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptions => {
   const diarize = !text.includes("--no-diarize");
@@ -149,6 +150,12 @@ export const extractGoogleDriveUrls = (text: string): string[] => {
   const urlPattern = /https?:\/\/[^\s<>]+/gi;
   const urls = text.match(urlPattern) || [];
   return urls.filter(url => isGoogleDriveUrl(url));
+};
+
+export const extractDropboxUrls = (text: string): string[] => {
+  const urlPattern = /https?:\/\/[^\s<>]+/gi;
+  const urls = text.match(urlPattern) || [];
+  return urls.filter(url => isDropboxUrl(url));
 };
 
 /**
