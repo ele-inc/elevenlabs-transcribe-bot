@@ -26,27 +26,15 @@ interface CloudEvent {
   };
 }
 
-// Workspace Events Drive payload structure
-interface DriveEventPayload {
-  eventType?: string;
-  driveItem?: {
-    driveItemId?: string;
-    mimeType?: string;
-    name?: string;
-    driveId?: string;
-    parentId?: string;
-  };
-  // Alternative field names (varies by tenant/version)
-  resourceId?: string;
-  fileId?: string;
-  itemId?: string;
-  parentFolderId?: string;
-}
 
 // Track processed events to prevent duplicates
 const processedEvents = new Map<string, number>();
 const MAX_PROCESSED_EVENTS = 1000;
 const EVENT_TTL_MS = 3600000; // 1 hour
+
+// Track files being processed (to prevent concurrent processing)
+const filesInProgress = new Set<string>();
+const FILE_PROCESS_TIMEOUT_MS = 60000; // 1 minute timeout for processing
 
 // Clean up old events periodically
 function cleanupProcessedEvents() {
@@ -112,31 +100,20 @@ async function uploadTranscriptToDrive(
 }
 
 // Extract file ID from various payload structures
+// deno-lint-ignore no-explicit-any
 function extractFileId(payload: any): string | null {
-  // Log the payload structure for debugging
-  console.log("Extracting fileId from payload keys:", Object.keys(payload));
-  
   // Try various possible field paths
-  const fileId = payload.driveItem?.driveItemId || 
+  return payload.file?.id ||
+         payload.driveItem?.driveItemId || 
          payload.resourceId || 
          payload.fileId || 
          payload.itemId ||
          payload.id ||
          payload.resource?.id ||
          payload.object?.id ||
-         payload.file?.id ||
          null;
-  
-  console.log("Extracted fileId:", fileId);
-  return fileId;
 }
 
-// Extract parent folder ID from payload
-function extractParentId(payload: DriveEventPayload): string | null {
-  return payload.driveItem?.parentId || 
-         payload.parentFolderId || 
-         null;
-}
 
 /**
  * Handle Drive Events from Eventarc
@@ -149,7 +126,6 @@ export async function handleDriveEvents(req: Request): Promise<Response> {
   try {
     // Parse request body
     const body = await req.json();
-    console.log("Received event body:", JSON.stringify(body));
 
     // Try different CloudEvent structures
     let messageData: string | undefined;
@@ -157,36 +133,30 @@ export async function handleDriveEvents(req: Request): Promise<Response> {
     // Standard CloudEvents structure
     if (body.data?.message?.data) {
       messageData = body.data.message.data;
-      console.log("Found message in standard CloudEvents structure");
     }
     // Alternative: Direct Pub/Sub message
     else if (body.message?.data) {
       messageData = body.message.data;
-      console.log("Found message in Pub/Sub structure");
     }
     // Alternative: Direct data field
     else if (body.data && typeof body.data === 'string') {
       messageData = body.data;
-      console.log("Found message in direct data field");
     }
     
     if (!messageData) {
-      console.log("No message data found in any expected location");
-      console.log("Request headers:", [...req.headers.entries()]);
+      console.log("No message data found in event");
       return okResponse(); // ACK to prevent retry
     }
 
     // Decode base64 payload
+    // deno-lint-ignore no-explicit-any
     let payload: any;
     try {
       const decodedData = atob(messageData);
       payload = JSON.parse(decodedData);
-      console.log("Decoded Drive event payload:", JSON.stringify(payload));
-    } catch (e) {
-      console.log("Failed to decode as base64, trying direct parse");
+    } catch (_e) {
       try {
         payload = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
-        console.log("Direct parsed payload:", JSON.stringify(payload));
       } catch (e2) {
         console.error("Failed to parse message data:", e2);
         return okResponse();
@@ -200,22 +170,46 @@ export async function handleDriveEvents(req: Request): Promise<Response> {
       return okResponse();
     }
 
-    // Check for duplicate processing
-    const eventKey = `${fileId}_${body.id || Date.now()}`;
-    if (processedEvents.has(eventKey)) {
-      console.log(`Duplicate event for file ${fileId}, skipping`);
+    // Extract version from payload for logging
+    const fileVersion = (payload.file as any)?.version || 'unknown';
+    const messageId = body.message?.messageId || body.message?.message_id || 'no-message-id';
+    
+    console.log(`Event: fileId=${fileId}, version=${fileVersion}, messageId=${messageId}`);
+
+    // Get file metadata first to check name
+    let metadata;
+    try {
+      metadata = await getGoogleDriveFileMetadata(fileId);
+    } catch (error) {
+      console.error("Failed to get file metadata:", error);
+      return okResponse();
+    }
+    
+    // Check if this file NAME was processed recently (within 60 seconds)
+    // This handles multiple IDs for the same file during upload
+    const fileNameKey = `name_${metadata.name}`;
+    const fileProcessKey = `processed_${fileId}`;
+    const lastProcessedTime = processedEvents.get(fileNameKey) || processedEvents.get(fileProcessKey);
+    const now = Date.now();
+    
+    if (lastProcessedTime && (now - lastProcessedTime < 60000)) {
+      console.log(`File ${metadata.name} (${fileId}) was processed ${Math.round((now - lastProcessedTime) / 1000)}s ago, skipping`);
       return okResponse();
     }
 
-    // Mark as processed
-    processedEvents.set(eventKey, Date.now());
-    cleanupProcessedEvents();
-    
-    // Maintain size limit
-    if (processedEvents.size > MAX_PROCESSED_EVENTS) {
-      const firstKey = processedEvents.keys().next().value;
-      if (firstKey) processedEvents.delete(firstKey);
+    // Check if file is currently being processed
+    if (filesInProgress.has(fileId)) {
+      console.log(`File ${fileId} is currently being processed, skipping`);
+      return okResponse();
     }
+
+    // Mark file as being processed
+    filesInProgress.add(fileId);
+    
+    // Clean up after timeout
+    setTimeout(() => {
+      filesInProgress.delete(fileId);
+    }, FILE_PROCESS_TIMEOUT_MS);
 
     // Get input/output folder IDs from environment
     const inputFolderId = Deno.env.get("DRIVE_INPUT_FOLDER_ID");
@@ -226,20 +220,13 @@ export async function handleDriveEvents(req: Request): Promise<Response> {
       return okResponse();
     }
 
-    // Get file metadata from Drive API
-    let metadata;
-    try {
-      metadata = await getGoogleDriveFileMetadata(fileId);
-      console.log("File metadata:", {
-        id: metadata.id,
-        name: metadata.name,
-        mimeType: metadata.mimeType,
-        size: metadata.size,
-      });
-    } catch (error) {
-      console.error("Failed to get file metadata:", error);
-      return okResponse(); // File might be deleted or inaccessible
-    }
+    // metadata already fetched above for name-based deduplication
+    console.log("File metadata:", {
+      id: metadata.id,
+      name: metadata.name,
+      mimeType: metadata.mimeType,
+      size: metadata.size,
+    });
 
     // Check if it's a video or audio file
     if (!metadata.mimeType.startsWith('video/') && !metadata.mimeType.startsWith('audio/')) {
@@ -309,8 +296,16 @@ export async function handleDriveEvents(req: Request): Promise<Response> {
       );
 
       console.log(`Successfully processed ${metadata.name}`);
+      
+      // Mark as successfully processed with timestamp (both by ID and name)
+      const successTime = Date.now();
+      processedEvents.set(fileProcessKey, successTime);
+      processedEvents.set(fileNameKey, successTime);
+      cleanupProcessedEvents();
 
     } finally {
+      // Remove from in-progress set
+      filesInProgress.delete(fileId);
       // Clean up temporary files
       console.log("Cleaning up temporary files...");
       if (audioPath) {
