@@ -19,9 +19,13 @@ import {
   getDiscordFileInfo,
 } from "./discord.ts";
 import { transcribeAudioFile } from "./scribe.ts";
-import { parseTranscriptionOptions, extractGoogleDriveUrls, extractDropboxUrls } from "./utils.ts";
-import { downloadGoogleDriveFile } from "./googledrive.ts";
-import { downloadDropboxFile } from "./dropbox.ts";
+import { parseTranscriptionOptions, generateOptionInfo } from "./utils.ts";
+import { 
+  extractCloudUrls, 
+  downloadFromCloud, 
+  isTranscribableCloudFile,
+  getProviderDisplayName 
+} from "./lib/cloud-storage.ts";
 
 // Handle Discord interactions
 export async function handleDiscordInteraction(request: Request): Promise<Response> {
@@ -169,9 +173,10 @@ function handleMessageCommand(
     return mimeType?.startsWith("audio/") || mimeType?.startsWith("video/");
   });
 
-  // Check for Google Drive and Dropbox URLs in message content
-  const googleDriveUrls = extractGoogleDriveUrls(message.content || "");
-  const dropboxUrls = extractDropboxUrls(message.content || "");
+  // Check for cloud storage URLs in message content
+  const cloudUrls = extractCloudUrls(message.content || "");
+  const googleDriveUrls = cloudUrls.filter(u => u.provider === 'google-drive').map(u => u.url);
+  const dropboxUrls = cloudUrls.filter(u => u.provider === 'dropbox').map(u => u.url);
 
   if ((!audioVideoAttachments || audioVideoAttachments.length === 0) && 
       googleDriveUrls.length === 0 && dropboxUrls.length === 0) {
@@ -240,8 +245,9 @@ async function processDiscordTranscription(
   try {
     // Handle Google Drive or Dropbox URL
     if (params.url) {
-      const googleDriveUrls = extractGoogleDriveUrls(params.url);
-      const dropboxUrls = extractDropboxUrls(params.url);
+      const cloudUrls = extractCloudUrls(params.url);
+      const googleDriveUrls = cloudUrls.filter(u => u.provider === 'google-drive').map(u => u.url);
+      const dropboxUrls = cloudUrls.filter(u => u.provider === 'dropbox').map(u => u.url);
 
       if (googleDriveUrls.length > 0) {
         await processGoogleDriveTranscription(interaction, googleDriveUrls[0], params.options);
@@ -283,10 +289,10 @@ async function processGoogleDriveTranscription(
     const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
 
     // Download and get metadata
-    const { filename, mimeType } = await downloadGoogleDriveFile(url, tempPath);
+    const { filename, mimeType = "" } = await downloadFromCloud(url, tempPath);
 
     // Check if it's an audio/video file
-    if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
+    if (!isTranscribableCloudFile(mimeType)) {
       await editInteractionReply(
         interaction.token,
         `❌ ファイル "${filename}" は音声または動画ファイルではありません。`
@@ -348,10 +354,10 @@ async function processDropboxTranscription(
     const tempPath = `${tempDir}/dropbox_${Date.now()}.tmp`;
 
     // Download and get metadata
-    const { filename, mimeType } = await downloadDropboxFile(url, tempPath);
+    const { filename, mimeType = "" } = await downloadFromCloud(url, tempPath);
 
     // Check if it's an audio/video file
-    if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
+    if (!isTranscribableCloudFile(mimeType)) {
       await editInteractionReply(
         interaction.token,
         `❌ ファイル "${filename}" は音声または動画ファイルではありません。`
