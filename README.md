@@ -81,7 +81,6 @@ Create a `.env` file in the project root directory and add the following environ
 ```
 ELEVENLABS_API_KEY="your-elevenlabs-api-key"
 SLACK_BOT_TOKEN="your-slack-bot-token"
-SLACK_SIGNING_SECRET="your-slack-signing-secret"
 DISCORD_APPLICATION_ID="your-discord-app-id"
 DISCORD_PUBLIC_KEY="your-discord-public-key"
 DISCORD_BOT_TOKEN="your-discord-bot-token"

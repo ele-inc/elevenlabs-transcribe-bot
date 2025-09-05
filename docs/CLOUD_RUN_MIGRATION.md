@@ -82,7 +82,6 @@ gcloud run services update scribe-bot \
   --region asia-northeast1 \
   --set-env-vars \
     SLACK_BOT_TOKEN=xoxb-your-token,\
-    SLACK_SIGNING_SECRET=your-secret,\
     DISCORD_APPLICATION_ID=your-id,\
     DISCORD_PUBLIC_KEY=your-key,\
     DISCORD_BOT_TOKEN=your-token,\
@@ -114,7 +113,6 @@ docker build -t scribe-bot-local .
 # Run locally
 docker run -p 8080:8080 \
   -e SLACK_BOT_TOKEN=your-token \
-  -e SLACK_SIGNING_SECRET=your-secret \
   -e DISCORD_APPLICATION_ID=your-id \
   -e DISCORD_PUBLIC_KEY=your-key \
   -e DISCORD_BOT_TOKEN=your-token \
@@ -129,7 +127,6 @@ cd src
 
 # Set environment variables
 export SLACK_BOT_TOKEN=your-token
-export SLACK_SIGNING_SECRET=your-secret
 # ... set other variables
 
 # Run the server
