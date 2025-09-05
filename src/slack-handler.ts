@@ -209,7 +209,7 @@ export async function handleAppMention(event: SlackEvent) {
           console.error("Error processing Dropbox file:", error);
           await sendSlackMessage(
             event.channel,
-            `Dropboxファイルの処理中にエラーが発生しました: ${error.message}`,
+            `Dropboxファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`,
             event.ts,
           );
         }
