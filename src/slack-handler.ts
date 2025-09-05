@@ -145,7 +145,7 @@ export async function handleAppMention(event: SlackEvent) {
       console.error("Error processing cloud storage file:", error);
       await sendSlackMessage(
         event.channel,
-        `クラウドファイルの処理中にエラーが発生しました: ${error.message}`,
+        `クラウドファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`,
         event.ts,
       );
     }
