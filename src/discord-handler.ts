@@ -19,7 +19,7 @@ import {
   getDiscordFileInfo,
 } from "./discord.ts";
 import { transcribeAudioFile } from "./scribe.ts";
-import { parseTranscriptionOptions } from "./utils.ts";
+import { parseTranscriptionOptions, generateOptionInfo } from "./utils.ts";
 import { 
   extractCloudUrl, 
   downloadFromCloud, 
@@ -227,6 +227,17 @@ async function processDiscordTranscription(
   }
 ) {
   try {
+    // Display initial status with option info
+    const optionText = generateOptionInfo(params.options);
+    const initialMessage = optionText 
+      ? `📝 文字起こしを開始します${optionText}...`
+      : `📝 文字起こしを開始します...`;
+    
+    await editInteractionReply(
+      interaction.token,
+      initialMessage
+    );
+
     // Handle Google Drive or Dropbox URL
     if (params.url) {
       const cloudUrl = extractCloudUrl(params.url);
@@ -283,10 +294,11 @@ async function processCloudFileTranscription(
       return;
     }
 
-    // Update status
+    // Update status with option info
+    const optionText = generateOptionInfo(options);
     await editInteractionReply(
       interaction.token,
-      `🎵 ファイル "${filename}" を文字起こし中...`
+      `🎵 ファイル "${filename}" を文字起こし中${optionText}...`
     );
 
     // Transcribe
@@ -341,10 +353,11 @@ async function processDiscordAttachment(
     // Write to temp file
     await Deno.writeFile(tempPath, fileData);
 
-    // Update status
+    // Update status with option info
+    const optionText = generateOptionInfo(options);
     await editInteractionReply(
       interaction.token,
-      `🎵 "${attachment.filename}" を文字起こし中...`
+      `🎵 "${attachment.filename}" を文字起こし中${optionText}...`
     );
 
     // Transcribe
