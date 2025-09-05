@@ -1,28 +1,35 @@
-// Re-export types from modular type files
-export type {
-  WordItem,
-  SpeakerUtterance,
-  Sentence,
-  TranscriptionOptions,
-  TranscriptionLog,
-  TranscriptionResult,
-} from "./types/transcription.ts";
+/**
+ * Central type exports
+ */
 
+// Export all transcription types
+export type {
+  TranscriptionOptions,
+  WordItem,
+  Sentence,
+  SpeakerUtterance,
+  TranscriptionResult,
+  TranscriptionLog,
+} from "./transcription.ts";
+
+// Export all Slack types
 export type {
   SlackFile,
   SlackEvent,
   SlackMessage,
   SlackBlock,
   SlackAttachment,
-} from "./types/slack.ts";
+} from "./slack.ts";
 
+// Export all Discord types
 export type {
   DiscordAttachment,
   DiscordMessage,
   DiscordEmbed,
   DiscordInteraction,
-} from "./types/discord.ts";
+} from "./discord.ts";
 
+// Export all media types
 export type {
   MediaFile,
   DownloadedFile,
@@ -30,4 +37,4 @@ export type {
   SupportedAudioFormat,
   SupportedVideoFormat,
   SupportedMediaFormat,
-} from "./types/media.ts";
+} from "./media.ts";
