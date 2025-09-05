@@ -6,7 +6,7 @@ A multi-platform bot that uses the [ElevenLabs Scribe API](https://elevenlabs.io
 
 - **Multi-platform support:** Works with both Slack and Discord
 - Transcribes audio and video files when mentioned or via slash commands
-- **Google Drive integration:** Supports Google Drive video/audio links for transcription
+- **Cloud storage integration:** Supports Google Drive and Dropbox links for transcription
 - **Speaker diarization:** Identifies different speakers in the conversation
 - **Automatic timestamps:** Adds timestamps for better navigation
 - **Audio event detection:** Detects music, laughter, and other audio events
@@ -27,7 +27,8 @@ Example:
 @bot transcribe this file --no-timestamp --no-diarize
 @bot transcribe this file --num-speakers 3
 @bot https://drive.google.com/file/d/xxxxx/view --num-speakers 4
-@bot transcribe this file --speaker-names "田中,山田"
+@bot https://www.dropbox.com/s/xxxxx/audio.mp3?dl=0 --speaker-names "田中,山田"
+@bot transcribe this file --speaker-names "Alice,Bob"
 ```
 
 **Note:** 
