@@ -10,6 +10,11 @@ import { transcribeAudioFile } from "./scribe.ts";
 import { downloadGoogleDriveFile } from "./googledrive.ts";
 import { downloadDropboxFile } from "./dropbox.ts";
 import { textResponse, okResponse, badRequest } from "./http-utils.ts";
+import { 
+  extractCloudStorageUrls, 
+  downloadCloudFile, 
+  getProviderDisplayName 
+} from "./cloud-storage.ts";
 
 // Set to track processed events (with size limit to prevent memory leak)
 const processedEvents = new Set<string>();
@@ -39,12 +44,11 @@ export async function handleAppMention(event: SlackEvent) {
   const options = parseTranscriptionOptions(event.text);
   console.log("Parsed options:", options);
 
-  // Check for Google Drive and Dropbox URLs in the message
-  const googleDriveUrls = extractGoogleDriveUrls(event.text || "");
-  const dropboxUrls = extractDropboxUrls(event.text || "");
+  // Check for cloud storage URLs in the message
+  const cloudUrls = extractCloudStorageUrls(event.text || "");
 
   // Check if the mention includes files or cloud storage URLs
-  if ((!event.files || event.files.length === 0) && googleDriveUrls.length === 0 && dropboxUrls.length === 0) {
+  if ((!event.files || event.files.length === 0) && cloudUrls.length === 0) {
     const usageMessage = `📝 *使い方*\n\n` +
       `音声または動画ファイルをアップロードしてメンションするか、\n` +
       `Google DriveまたはDropboxのリンクを含めてメンションしてください。\n\n` +
@@ -68,151 +72,83 @@ export async function handleAppMention(event: SlackEvent) {
     return;
   }
 
-  // Process Google Drive URLs first
-  for (const driveUrl of googleDriveUrls) {
-        // Create temporary file path
-        const tempDir = await Deno.makeTempDir();
-        const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
+  // Process cloud storage URLs
+  for (const cloudUrl of cloudUrls) {
+    try {
+      // Create temporary file path
+      const tempDir = await Deno.makeTempDir();
+      const tempPath = `${tempDir}/cloud_${Date.now()}.tmp`;
 
-        // Reply that we're processing the Google Drive file
+      // Reply that we're processing the cloud file
+      const providerName = getProviderDisplayName(cloudUrl.provider);
+      await sendSlackMessage(
+        event.channel,
+        `${providerName}ファイルを処理中...`,
+        event.ts,
+      );
+
+      // Download and get metadata
+      const { filename, mimeType } = await downloadCloudFile(cloudUrl.originalUrl, tempPath);
+
+      // Check if it's an audio/video file
+      if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
         await sendSlackMessage(
           event.channel,
-          `Google Driveファイルを処理中...`,
+          `${providerName}ファイル "${filename}" は音声または動画ファイルではありません。`,
           event.ts,
         );
+        // Clean up temp file
+        await Deno.remove(tempPath);
+        continue;
+      }
 
-        // Download and get metadata
-        const { filename, mimeType } = await downloadGoogleDriveFile(driveUrl, tempPath);
+      // Reply with file info including options
+      const optionInfo = [];
+      if (!options.diarize) optionInfo.push("話者識別OFF");
+      if (!options.showTimestamp) optionInfo.push("タイムスタンプOFF");
+      if (!options.tagAudioEvents) optionInfo.push("音声イベントOFF");
+      if (options.diarize && options.numSpeakers && options.numSpeakers !== 2) {
+        optionInfo.push(`話者数: ${options.numSpeakers}`);
+      }
+      if (options.speakerNames && options.speakerNames.length > 0) {
+        optionInfo.push(`話者名: ${options.speakerNames.join(", ")}`);
+      }
 
-        // Check if it's an audio/video file
-        if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
-          await sendSlackMessage(
-            event.channel,
-            `Google Driveファイル "${filename}" は音声または動画ファイルではありません。`,
-            event.ts,
-          );
-          // Clean up temp file
-          await Deno.remove(tempPath);
-          continue;
-        }
+      const optionText = optionInfo.length > 0
+        ? ` (${optionInfo.join(", ")})`
+        : "";
 
-        // Reply with file info including options
-        const optionInfo = [];
-        if (!options.diarize) optionInfo.push("話者識別OFF");
-        if (!options.showTimestamp) optionInfo.push("タイムスタンプOFF");
-        if (!options.tagAudioEvents) optionInfo.push("音声イベントOFF");
-        if (options.diarize && options.numSpeakers && options.numSpeakers !== 2) {
-          optionInfo.push(`話者数: ${options.numSpeakers}`);
-        }
-        if (options.speakerNames && options.speakerNames.length > 0) {
-          optionInfo.push(`話者名: ${options.speakerNames.join(", ")}`);
-        }
+      await sendSlackMessage(
+        event.channel,
+        `${providerName}ファイル "${filename}" を受信しました。文字起こし中${optionText}...`,
+        event.ts,
+      );
 
-        const optionText = optionInfo.length > 0
-          ? ` (${optionInfo.join(", ")})`
-          : "";
+      // Create file URL for local temp file
+      const fileURL = `file://${tempPath}`;
 
-        await sendSlackMessage(
-          event.channel,
-          `Google Driveファイル "${filename}" を受信しました。文字起こし中${optionText}...`,
-          event.ts,
-        );
-
-        // Create file URL for local temp file
-        const fileURL = `file://${tempPath}`;
-
-        // Run transcription in the background
-        // Process transcription asynchronously without blocking response
-        transcribeAudioFile({
-            fileURL,
-            fileType: mimeType,
-            duration: 0, // Duration not available from Google Drive
-            channelId: event.channel,
-            timestamp: event.ts,
-            userId: event.user,
-            options,
-            filename,
-            isGoogleDrive: true,
-            tempPath, // Pass temp path for cleanup
-          }).catch(console.error);
-  }
-
-  // Process Dropbox URLs
-  for (const dropboxUrl of dropboxUrls) {
-        // Create temporary file path
-        const tempDir = await Deno.makeTempDir();
-        const tempPath = `${tempDir}/dropbox_${Date.now()}.tmp`;
-
-        // Reply that we're processing the Dropbox file
-        await sendSlackMessage(
-          event.channel,
-          `Dropboxファイルを処理中...`,
-          event.ts,
-        );
-
-        try {
-          // Download and get metadata
-          const { filename, mimeType } = await downloadDropboxFile(dropboxUrl, tempPath);
-
-          // Check if it's an audio/video file
-          if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
-            await sendSlackMessage(
-              event.channel,
-              `Dropboxファイル "${filename}" は音声または動画ファイルではありません。`,
-              event.ts,
-            );
-            // Clean up temp file
-            await Deno.remove(tempPath);
-            continue;
-          }
-
-          // Reply with file info including options
-          const optionInfo = [];
-          if (!options.diarize) optionInfo.push("話者識別OFF");
-          if (!options.showTimestamp) optionInfo.push("タイムスタンプOFF");
-          if (!options.tagAudioEvents) optionInfo.push("音声イベントOFF");
-          if (options.diarize && options.numSpeakers && options.numSpeakers !== 2) {
-            optionInfo.push(`話者数: ${options.numSpeakers}`);
-          }
-          if (options.speakerNames && options.speakerNames.length > 0) {
-            optionInfo.push(`話者名: ${options.speakerNames.join(", ")}`);
-          }
-
-          const optionText = optionInfo.length > 0
-            ? ` (${optionInfo.join(", ")})`
-            : "";
-
-          await sendSlackMessage(
-            event.channel,
-            `Dropboxファイル "${filename}" を受信しました。文字起こし中${optionText}...`,
-            event.ts,
-          );
-
-          // Create file URL for local temp file
-          const fileURL = `file://${tempPath}`;
-
-          // Run transcription in the background
-          // Process transcription asynchronously without blocking response
-          transcribeAudioFile({
-              fileURL,
-              fileType: mimeType,
-              duration: 0, // Duration not available from Dropbox
-              channelId: event.channel,
-              timestamp: event.ts,
-              userId: event.user,
-              options,
-              filename,
-              isGoogleDrive: true, // Reuse the same flag for external file handling
-              tempPath, // Pass temp path for cleanup
-            }).catch(console.error);
-        } catch (error) {
-          console.error("Error processing Dropbox file:", error);
-          await sendSlackMessage(
-            event.channel,
-            `Dropboxファイルの処理中にエラーが発生しました: ${error.message}`,
-            event.ts,
-          );
-        }
+      // Run transcription in the background
+      // Process transcription asynchronously without blocking response
+      transcribeAudioFile({
+        fileURL,
+        fileType: mimeType,
+        duration: 0, // Duration not available from cloud storage
+        channelId: event.channel,
+        timestamp: event.ts,
+        userId: event.user,
+        options,
+        filename,
+        isGoogleDrive: true, // Reuse flag for external file handling
+        tempPath, // Pass temp path for cleanup
+      }).catch(console.error);
+    } catch (error) {
+      console.error("Error processing cloud storage file:", error);
+      await sendSlackMessage(
+        event.channel,
+        `クラウドファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`,
+        event.ts,
+      );
+    }
   }
 
     // Process regular Slack files
@@ -284,18 +220,18 @@ export async function handleSlackEvents(req: Request): Promise<Response> {
     return handleUrlVerification(body.challenge);
   }
 
-  // Handle events
+  // Handle event callbacks
   if (body.type === "event_callback") {
-    const event = body.event;
+    const event = body.event as SlackEvent;
 
-    if (event.type !== "app_mention") {
-      return okResponse();
+    // Handle app mention events
+    if (event.type === "app_mention" && event.text) {
+      // Process mention asynchronously without blocking response
+      handleAppMention(event).catch(console.error);
+      return okResponse(); // Return immediately
     }
-
-    // Process in background to respond quickly to Slack
-    handleAppMention(event).catch(console.error);
-    return okResponse();
   }
 
-  return badRequest("Unknown event type");
+  // Return error for unhandled events
+  return badRequest("Unhandled event type");
 }
