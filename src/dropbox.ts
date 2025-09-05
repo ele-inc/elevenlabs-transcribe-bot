@@ -36,11 +36,13 @@ export function parseDropboxUrl(url: string): string | null {
 
 // Convert Dropbox sharing URL to direct download URL
 export function convertToDirectDownloadUrl(url: string): string {
-  // Replace dl=0 with dl=1 to force direct download
-  let directUrl = url.replace(/[?&]dl=0/, "?dl=1");
+  let directUrl = url;
   
-  // If no dl parameter exists, add it
-  if (!directUrl.includes("dl=1")) {
+  // Replace dl=0 with dl=1 to force direct download
+  if (directUrl.includes("dl=0")) {
+    directUrl = directUrl.replace(/dl=0/g, "dl=1");
+  } else if (!directUrl.includes("dl=1")) {
+    // If no dl parameter exists, add it
     if (directUrl.includes("?")) {
       directUrl += "&dl=1";
     } else {
