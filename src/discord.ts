@@ -4,6 +4,7 @@ import {
 } from "npm:discord-api-types@0.37.100/v10";
 import nacl from "npm:tweetnacl@1.0.3";
 import { config } from "./config.ts";
+import { downloadFile, cleanupTempFile } from "./lib/download.ts";
 
 // Helper function to convert hex string to Uint8Array
 function hexToUint8Array(hex: string): Uint8Array {
@@ -185,18 +186,20 @@ export async function editInteractionReply(
 // Download file from Discord CDN - optimized for speed
 export async function downloadDiscordFile(url: string): Promise<Uint8Array> {
   console.log("Downloading Discord file from:", url);
-  const response = await fetch(url);
+  
+  const downloadedFile = await downloadFile(url, undefined, {
+    maxRetries: 3,
+    timeoutMs: 300000,
+  });
 
-  if (!response.ok) {
-    throw new Error(`Failed to download Discord file: ${response.status}`);
+  try {
+    const buffer = await Deno.readFile(downloadedFile.path);
+    console.log(`Download complete: ${(buffer.length / (1024 * 1024)).toFixed(2)}MB`);
+    return buffer;
+  } finally {
+    // Clean up temp file
+    await cleanupTempFile(downloadedFile.path);
   }
-
-  // Download entire file at once for maximum speed
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = new Uint8Array(arrayBuffer);
-
-  console.log(`Download complete: ${(buffer.length / (1024 * 1024)).toFixed(2)}MB`);
-  return buffer;
 }
 
 // Get file info from Discord attachment URL

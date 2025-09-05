@@ -1,4 +1,5 @@
 import { config } from "./config.ts";
+import { downloadWithAuth, cleanupTempFile } from "./lib/download.ts";
 
 export async function sendSlackMessage(
   channel: string,
@@ -114,30 +115,25 @@ export async function uploadTranscriptToSlack(
 
 export async function downloadSlackFile(fileURL: string): Promise<ArrayBuffer> {
   console.log("fetching file");
-  const response = await fetch(fileURL, {
-    headers: {
-      "Authorization": `Bearer ${config.slackBotToken}`,
-    },
-  });
+  const downloadedFile = await downloadWithAuth(
+    fileURL,
+    config.slackBotToken,
+    'Bearer',
+    undefined,
+    {
+      maxRetries: 3,
+      timeoutMs: 300000,
+    }
+  );
 
-  console.log("Response status:", response.status);
-  console.log("Response content-type:", response.headers.get("content-type"));
-
-  if (response.headers.get("content-type")?.includes("text/html")) {
-    const htmlContent = await response.text();
-    console.log(
-      "HTML Response (first 500 chars):",
-      htmlContent.substring(0, 500),
-    );
-    throw new Error(
-      "Received HTML instead of audio file - likely authentication error",
-    );
+  try {
+    const data = await Deno.readFile(downloadedFile.path);
+    console.log("File size:", data.byteLength, "bytes");
+    return data.buffer;
+  } finally {
+    // Clean up temp file
+    await cleanupTempFile(downloadedFile.path);
   }
-
-  const sourceFileArrayBuffer = await response.arrayBuffer();
-  console.log("File size:", sourceFileArrayBuffer.byteLength, "bytes");
-
-  return sourceFileArrayBuffer;
 }
 
 export async function downloadSlackFileToPath(fileURL: string, filePath: string): Promise<void> {
