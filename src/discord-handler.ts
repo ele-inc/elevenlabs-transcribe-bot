@@ -267,19 +267,16 @@ async function processGoogleDriveTranscription(
     const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
 
     // Download and get metadata
-    const { filename, mimeType } = await downloadGoogleDriveFile(url, tempPath);
-
-    // Check if it's an audio/video file
-    if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
-      await editInteractionReply(
-        interaction.token,
-        `❌ ファイル "${filename}" は音声または動画ファイルではありません。`
-      );
-      // Clean up
-      await Deno.remove(tempPath).catch(() => {});
+    const result = await downloadGoogleDriveFile(url, tempPath);
+    
+    // Skip if file was not downloaded (non-media file)
+    if (!result) {
+      // Clean up temp directory
       await Deno.remove(tempDir).catch(() => {});
-      return;
+      return;  // Silently skip non-media files
     }
+    
+    const { filename, mimeType } = result;
 
     // Update status
     await editInteractionReply(

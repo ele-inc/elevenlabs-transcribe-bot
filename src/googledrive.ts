@@ -81,10 +81,11 @@ export async function getGoogleDriveFileMetadata(fileId: string): Promise<Google
 }
 
 // Download Google Drive file to temporary path with streaming
+// Returns true if download was successful, false if file was skipped (non-media)
 export async function downloadGoogleDriveFileToPath(
   fileId: string,
   tempPath: string,
-): Promise<void> {
+): Promise<boolean> {
   const drive = initializeGoogleDriveClient();
 
   try {
@@ -102,11 +103,29 @@ export async function downloadGoogleDriveFileToPath(
       "application/vnd.google-apps.spreadsheet",
       "application/vnd.google-apps.presentation",
       "application/vnd.google-apps.drawing",
+      "application/vnd.google-apps.form",
+      "application/vnd.google-apps.map",
+      "application/vnd.google-apps.site",
+      "application/vnd.google-apps.script",
+      "application/vnd.google-apps.jamboard",
     ];
 
     if (googleDocsTypes.includes(metadata.mimeType)) {
-      // Google Docs files cannot be downloaded directly
-      throw new Error(`Cannot download Google Docs file (${metadata.mimeType}). Please export it to a downloadable format first.`);
+      // Skip Google Docs files silently
+      console.log(`Skipping Google Docs file: ${metadata.name} (${metadata.mimeType})`);
+      return false;
+    }
+
+    // Check if it's a media file (audio or video)
+    const isMediaFile = 
+      metadata.mimeType.toLowerCase().startsWith("audio/") ||
+      metadata.mimeType.toLowerCase().startsWith("video/") ||
+      metadata.mimeType === "application/ogg";  // Can be audio or video
+
+    if (!isMediaFile) {
+      // Skip non-media files silently
+      console.log(`Skipping non-media file: ${metadata.name} (${metadata.mimeType})`);
+      return false;
     }
 
     // Download all files with streaming
@@ -155,6 +174,7 @@ export async function downloadGoogleDriveFileToPath(
     const downloadTime = (performance.now() - startTime) / 1000;
     const actualSizeMB = downloadedBytes / (1024 * 1024);
     console.log(`Download complete: ${actualSizeMB.toFixed(2)}MB in ${downloadTime.toFixed(2)}s (${(actualSizeMB / downloadTime).toFixed(2)}MB/s)`);
+    return true;
 
   } catch (error) {
     const err = error as { code?: number; message?: string };
@@ -174,10 +194,11 @@ export function isGoogleDriveUrl(url: string): boolean {
 }
 
 // Download Google Drive file and return metadata
+// Returns null if file was skipped (non-media)
 export async function downloadGoogleDriveFile(
   url: string,
   tempPath: string,
-): Promise<{ filename: string; mimeType: string }> {
+): Promise<{ filename: string; mimeType: string } | null> {
   const fileId = parseGoogleDriveUrl(url);
 
   if (!fileId) {
@@ -187,8 +208,12 @@ export async function downloadGoogleDriveFile(
   // Get file metadata
   const metadata = await getGoogleDriveFileMetadata(fileId);
 
-  // Download file (will throw error for Google Docs files)
-  await downloadGoogleDriveFileToPath(fileId, tempPath);
+  // Download file (returns false if skipped)
+  const downloaded = await downloadGoogleDriveFileToPath(fileId, tempPath);
+  
+  if (!downloaded) {
+    return null;  // File was skipped
+  }
 
   return {
     filename: metadata.name,

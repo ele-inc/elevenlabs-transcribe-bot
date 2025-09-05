@@ -79,19 +79,14 @@ export async function handleAppMention(event: SlackEvent) {
         );
 
         // Download and get metadata
-        const { filename, mimeType } = await downloadGoogleDriveFile(driveUrl, tempPath);
-
-        // Check if it's an audio/video file
-        if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
-          await sendSlackMessage(
-            event.channel,
-            `Google Driveファイル "${filename}" は音声または動画ファイルではありません。`,
-            event.ts,
-          );
-          // Clean up temp file
-          await Deno.remove(tempPath);
-          continue;
+        const result = await downloadGoogleDriveFile(driveUrl, tempPath);
+        
+        // Skip if file was not downloaded (non-media file)
+        if (!result) {
+          continue;  // Silently skip non-media files
         }
+        
+        const { filename, mimeType } = result;
 
         // Reply with file info including options
         const optionInfo = [];
