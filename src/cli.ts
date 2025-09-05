@@ -1,7 +1,7 @@
 #!/usr/bin/env -S deno run --allow-all
 
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
-import { transcribeFile } from "./transcribe-core.ts";
+import { transcribeGoogleDriveStream, transcribeLocalFileStream } from "./transcribe-stream.ts";
 import { TranscriptionOptions } from "./types.ts";
 import { createTranscriptionHeader } from "./utils.ts";
 
@@ -14,7 +14,7 @@ interface CliOptions extends TranscriptionOptions {
 /**
  * Parse command line arguments
  */
-function parseArgs(): { filePath: string; options: CliOptions } {
+function parseArgs(): { input: string; options: CliOptions } {
   const args = Deno.args;
   
   // Show help if no arguments or help flag
@@ -23,10 +23,10 @@ function parseArgs(): { filePath: string; options: CliOptions } {
     Deno.exit(0);
   }
 
-  // Find the file path (first non-flag argument)
-  const filePath = args.find((arg) => !arg.startsWith("-")) || "";
-  if (!filePath) {
-    console.error("Error: File path is required");
+  // Find the input (file path or Google Drive URL)
+  const input = args.find((arg) => !arg.startsWith("-")) || "";
+  if (!input) {
+    console.error("Error: File path or Google Drive URL is required");
     printHelp();
     Deno.exit(1);
   }
@@ -77,7 +77,7 @@ function parseArgs(): { filePath: string; options: CliOptions } {
     }
   }
 
-  return { filePath, options };
+  return { input, options };
 }
 
 /**
@@ -86,11 +86,17 @@ function parseArgs(): { filePath: string; options: CliOptions } {
 function printHelp(): void {
   console.log(`
 ElevenLabs Transcription CLI
+================================================
+Memory-efficient streaming processing for large files!
 
-Usage: deno run --allow-all src/cli.ts [options] <file>
+Usage: deno run --allow-all src/cli.ts [options] <input>
 
 Arguments:
-  <file>                Path to audio or video file to transcribe
+  <input>              Path to audio/video file OR Google Drive URL
+
+Supported Inputs:
+  - Local files:       audio.mp3, video.mp4, etc.
+  - Google Drive URLs: https://drive.google.com/file/d/xxx/view
 
 Options:
   -h, --help           Show this help message
@@ -107,20 +113,31 @@ Transcription Options:
   --no-audio-events    Disable audio event tagging
 
 Examples:
-  # Basic transcription to stdout
-  deno run --allow-all src/cli.ts audio.mp3
+  # Transcribe local video file (streaming conversion)
+  deno run --allow-all src/cli.ts video.mp4
 
-  # Save to file with speaker names
+  # Transcribe Google Drive video (no download to disk!)
+  deno run --allow-all src/cli.ts "https://drive.google.com/file/d/xxx/view"
+
+  # Save with speaker names
   deno run --allow-all src/cli.ts -o transcript.txt --speaker-names "Alice,Bob" meeting.mp4
 
-  # JSON output without timestamps
-  deno run --allow-all src/cli.ts -f json --no-timestamp audio.m4a
+  # JSON output from Google Drive
+  deno run --allow-all src/cli.ts -f json "https://drive.google.com/file/d/xxx/view"
 
-  # Disable speaker diarization
-  deno run --allow-all src/cli.ts --no-diarize recording.wav
-
-Note: Video files (mp4, mkv, mov, etc.) will be automatically converted to audio before transcription.
+Benefits:
+  ✅ No temporary files created for video conversion
+  ✅ Streams directly from Google Drive without downloading
+  ✅ Memory efficient - processes in chunks
+  ✅ Faster - starts processing before download completes
 `);
+}
+
+/**
+ * Check if input is a Google Drive URL
+ */
+function isGoogleDriveUrl(input: string): boolean {
+  return input.includes("drive.google.com") || input.includes("docs.google.com");
 }
 
 /**
@@ -128,15 +145,7 @@ Note: Video files (mp4, mkv, mov, etc.) will be automatically converted to audio
  */
 async function main() {
   try {
-    const { filePath, options } = parseArgs();
-
-    // Check if file exists
-    try {
-      await Deno.stat(filePath);
-    } catch {
-      console.error(`Error: File not found: ${filePath}`);
-      Deno.exit(1);
-    }
+    const { input, options } = parseArgs();
 
     // Check if API key is loaded
     const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
@@ -146,7 +155,8 @@ async function main() {
       Deno.exit(1);
     }
 
-    console.log(`Transcribing: ${filePath}`);
+    console.log(`🚀 Streaming Transcription Mode`);
+    console.log(`Input: ${input}`);
     console.log("Options:", {
       diarize: options.diarize,
       numSpeakers: options.numSpeakers,
@@ -156,8 +166,26 @@ async function main() {
       format: options.format,
     });
 
-    // Perform transcription
-    const result = await transcribeFile(filePath, options);
+    let result;
+    let filename: string;
+
+    if (isGoogleDriveUrl(input)) {
+      console.log("📥 Streaming from Google Drive (no download to disk!)...");
+      result = await transcribeGoogleDriveStream(input, options);
+      filename = "google_drive_file";
+    } else {
+      // Check if local file exists
+      try {
+        await Deno.stat(input);
+      } catch {
+        console.error(`Error: File not found: ${input}`);
+        Deno.exit(1);
+      }
+      
+      console.log("📁 Processing local file with streaming...");
+      result = await transcribeLocalFileStream(input, options);
+      filename = input.split("/").pop() || input;
+    }
 
     if (!result.transcript) {
       console.error("Error: No transcript was generated");
@@ -165,7 +193,6 @@ async function main() {
     }
 
     // Add filename header to transcript
-    const filename = filePath.split("/").pop() || filePath;
     const finalTranscript = createTranscriptionHeader(filename) + result.transcript;
 
     // Determine output path
@@ -201,7 +228,7 @@ async function main() {
       
       if (outputPath) {
         await Deno.writeTextFile(outputPath, jsonString);
-        console.log(`\nTranscription saved to: ${outputPath}`);
+        console.log(`\n✅ Transcription saved to: ${outputPath}`);
       } else {
         console.log(jsonString);
       }
@@ -209,15 +236,16 @@ async function main() {
       // Text format
       if (outputPath) {
         await Deno.writeTextFile(outputPath, finalTranscript);
-        console.log(`\nTranscription saved to: ${outputPath}`);
+        console.log(`\n✅ Transcription saved to: ${outputPath}`);
       } else {
         console.log("\n" + finalTranscript);
       }
     }
 
-    console.log("\nTranscription completed successfully!");
+    console.log("\n🎉 Transcription completed successfully!");
+    console.log("💡 Memory usage was minimized through streaming!");
   } catch (error) {
-    console.error("Error during transcription:", error instanceof Error ? error.message : error);
+    console.error("❌ Error during transcription:", error instanceof Error ? error.message : error);
     if (error instanceof Error && error.stack) {
       console.error("Stack trace:", error.stack);
     }

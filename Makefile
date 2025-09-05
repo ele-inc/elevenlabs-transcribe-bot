@@ -59,7 +59,7 @@ transcribe:
 		exit 1; \
 	fi
 	@echo "🎙️ Transcribing file: $(FILE)"
-	@deno run --allow-all src/cli.ts $(FILE) $(ARGS)
+	@deno run --allow-all src/cli-stream.ts $(FILE) $(ARGS)
 
 # Help
 help:

@@ -6,8 +6,8 @@
 import { SlackEvent } from "./types.ts";
 import { parseTranscriptionOptions, extractGoogleDriveUrls } from "./utils.ts";
 import { sendSlackMessage } from "./slack.ts";
-import { transcribeAudioFile } from "./scribe.ts";
-import { downloadGoogleDriveFile } from "./googledrive.ts";
+import { transcribeAudioFile, transcribeAudioFromStream } from "./scribe.ts";
+import { GoogleDriveStreamer, parseGoogleDriveUrl } from "./googledrive-stream.ts";
 import { textResponse, okResponse, badRequest } from "./http-utils.ts";
 
 // Set to track processed events (with size limit to prevent memory leak)
@@ -65,33 +65,36 @@ export async function handleAppMention(event: SlackEvent) {
     return;
   }
 
-  // Process Google Drive URLs first
+  // Process Google Drive URLs with streaming
   for (const driveUrl of googleDriveUrls) {
-        // Create temporary file path
-        const tempDir = await Deno.makeTempDir();
-        const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
+        try {
+          // Parse Google Drive URL
+          const fileId = parseGoogleDriveUrl(driveUrl);
+          if (!fileId) {
+            await sendSlackMessage(
+              event.channel,
+              `無効なGoogle Drive URLです。`,
+              event.ts,
+            );
+            continue;
+          }
 
-        // Reply that we're processing the Google Drive file
-        await sendSlackMessage(
-          event.channel,
-          `Google Driveファイルを処理中...`,
-          event.ts,
-        );
+          // Initialize streamer
+          const streamer = new GoogleDriveStreamer();
+          
+          // Get file metadata
+          const metadata = await streamer.getFileMetadata(fileId);
+          const { name: filename, mimeType } = metadata;
 
-        // Download and get metadata
-        const { filename, mimeType } = await downloadGoogleDriveFile(driveUrl, tempPath);
-
-        // Check if it's an audio/video file
-        if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
-          await sendSlackMessage(
-            event.channel,
-            `Google Driveファイル "${filename}" は音声または動画ファイルではありません。`,
-            event.ts,
-          );
-          // Clean up temp file
-          await Deno.remove(tempPath);
-          continue;
-        }
+          // Check if it's an audio/video file
+          if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
+            await sendSlackMessage(
+              event.channel,
+              `Google Driveファイル "${filename}" は音声または動画ファイルではありません。`,
+              event.ts,
+            );
+            continue;
+          }
 
         // Reply with file info including options
         const optionInfo = [];
@@ -109,29 +112,57 @@ export async function handleAppMention(event: SlackEvent) {
           ? ` (${optionInfo.join(", ")})`
           : "";
 
-        await sendSlackMessage(
-          event.channel,
-          `Google Driveファイル "${filename}" を受信しました。文字起こし中${optionText}...`,
-          event.ts,
-        );
+          await sendSlackMessage(
+            event.channel,
+            `Google Driveファイル "${filename}" をストリーミングで文字起こし中${optionText}...`,
+            event.ts,
+          );
 
-        // Create file URL for local temp file
-        const fileURL = `file://${tempPath}`;
+          // Get audio stream (converts video if needed)
+          let audioStream: ReadableStream<Uint8Array>;
+          let processingDone: Promise<void>;
+          
+          if (mimeType.startsWith("video/")) {
+            console.log("Streaming video to audio conversion...");
+            const result = await streamer.streamVideoToAudio(fileId);
+            audioStream = result.stream;
+            processingDone = result.done;
+          } else {
+            console.log("Streaming audio directly...");
+            const result = await streamer.streamAudio(fileId);
+            audioStream = result.stream;
+            processingDone = result.done;
+          }
 
-        // Run transcription in the background
-        // Process transcription asynchronously without blocking response
-        transcribeAudioFile({
-            fileURL,
-            fileType: mimeType,
-            duration: 0, // Duration not available from Google Drive
-            channelId: event.channel,
-            timestamp: event.ts,
-            userId: event.user,
-            options,
-            filename,
-            isGoogleDrive: true,
-            tempPath, // Pass temp path for cleanup
-          }).catch(console.error);
+          // Run streaming transcription and wait for both to complete
+          const transcribePromise = transcribeAudioFromStream({
+              audioStream,
+              fileType: "audio/mpeg", // Always MP3 after conversion
+              channelId: event.channel,
+              timestamp: event.ts,
+              userId: event.user,
+              options,
+              filename,
+              platform: "slack",
+          });
+          
+          // Wait for both transcription and processing to complete
+          Promise.all([transcribePromise, processingDone]).catch((error) => {
+              console.error("Error processing Google Drive stream:", error);
+              sendSlackMessage(
+                event.channel,
+                `Google Driveファイルのストリーミング処理中にエラーが発生しました: ${error.message}`,
+                event.ts,
+              );
+          });
+        } catch (error) {
+          console.error("Error accessing Google Drive:", error);
+          await sendSlackMessage(
+            event.channel,
+            `Google Driveアクセスエラー: ${error instanceof Error ? error.message : "Unknown error"}`,
+            event.ts,
+          );
+        }
   }
 
     // Process regular Slack files

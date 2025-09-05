@@ -5,8 +5,6 @@ import {
 import {
   getFileExtensionFromMime,
   createTranscriptionHeader,
-  convertVideoToAudio,
-  isVideoFile,
 } from "./utils.ts";
 import {
   sendSlackMessage,
@@ -17,8 +15,106 @@ import {
   sendDiscordMessage,
   uploadTranscriptToDiscord,
 } from "./discord.ts";
-import { transcribeCore } from "./transcribe-core.ts";
+import { transcribeFile } from "./transcribe-core.ts";
+import { transcribeViaTmpFile } from "./transcribe-stream.ts";
 
+/**
+ * Transcribe audio from a stream (memory efficient with tmp file spooling)
+ */
+export async function transcribeAudioFromStream({
+  audioStream,
+  fileType,
+  channelId,
+  timestamp,
+  userId,
+  options,
+  filename,
+  platform = "slack",
+}: {
+  audioStream: ReadableStream<Uint8Array>;
+  fileType: string;
+  channelId: string;
+  timestamp: string;
+  userId: string;
+  options: TranscriptionOptions;
+  filename?: string;
+  platform?: "slack" | "discord";
+}) {
+  let transcript: string | null = null;
+  let languageCode: string | null = null;
+  const errorMsg: string | null = null;
+
+  console.log("Streaming transcription called");
+  console.log("fileType (MIME):", fileType);
+
+  try {
+    console.log("calling transcribe via tmp file with options:", options);
+
+    // Use tmp file spooling to avoid OOM
+    const result = await transcribeViaTmpFile(audioStream, options, filename);
+    
+    transcript = result.transcript;
+    languageCode = result.languageCode;
+
+    if (transcript) {
+      // Add header with filename if provided
+      const finalTranscript = filename
+        ? createTranscriptionHeader(filename) + transcript
+        : transcript;
+
+      if (platform === "slack") {
+        await uploadTranscriptToSlack(finalTranscript, channelId, timestamp);
+      } else if (platform === "discord") {
+        await uploadTranscriptToDiscord(finalTranscript, channelId);
+      }
+    } else {
+      console.log("No transcript generated, sending error message");
+      if (platform === "slack") {
+        await sendSlackMessage(
+          channelId,
+          "Sorry, no transcript was generated. Please try again.",
+          timestamp,
+        );
+      } else if (platform === "discord") {
+        await sendDiscordMessage(
+          channelId,
+          "❌ 文字起こしの生成に失敗しました。もう一度お試しください。"
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Transcription error:", error);
+    if (platform === "slack") {
+      await sendSlackMessage(
+        channelId,
+        `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        timestamp,
+      );
+    } else if (platform === "discord") {
+      await sendDiscordMessage(
+        channelId,
+        `❌ エラー: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
+    }
+  }
+
+  const logLine: TranscriptionLog = {
+    file_type: fileType,
+    duration: 0,
+    channel_id: channelId,
+    message_ts: timestamp,
+    user_id: userId,
+    language_code: languageCode,
+    error: errorMsg,
+  };
+
+  // Log transcription completion to console
+  console.log("Streaming transcription completed:", {
+    ...logLine,
+    transcriptLength: transcript ? transcript.length : 0,
+    timestamp: new Date().toISOString()
+  });
+}
 
 export async function transcribeAudioFile({
   fileURL,
@@ -49,8 +145,6 @@ export async function transcribeAudioFile({
   let languageCode: string | null = null;
   const errorMsg: string | null = null;
   let tempFilePath: string | null = null;
-  let audioFilePath: string | null = null;
-  let originalVideoPath: string | null = null;
 
   console.log("fileURL", fileURL, "scribe called");
   console.log("fileType (MIME):", fileType);
@@ -71,28 +165,10 @@ export async function transcribeAudioFile({
       await downloadSlackFileToPath(fileURL, tempFilePath);
     }
 
-    // Check if the file is a video and convert to MP3 if needed
-    if (isVideoFile(fileType)) {
-      console.log("Detected video file, converting to MP3...");
-      originalVideoPath = tempFilePath;
-      audioFilePath = await convertVideoToAudio(tempFilePath);
-      tempFilePath = audioFilePath;
+    console.log("calling transcribe-core with streaming, options:", options);
 
-      // Delete the original video file after conversion
-      console.log("Deleting original video file:", originalVideoPath);
-      await Deno.remove(originalVideoPath);
-    }
-
-    console.log("calling transcribe-core with options:", options);
-
-    // Read file into memory
-    const fileData = await Deno.readFile(tempFilePath);
-
-    // Use the appropriate MIME type
-    const mimeType = isVideoFile(fileType) ? "audio/mpeg" : fileType;
-
-    // Call the core transcription function
-    const result = await transcribeCore(fileData, mimeType, options);
+    // Use transcribeFile which now handles video conversion via streaming
+    const result = await transcribeFile(tempFilePath, options);
     
     transcript = result.transcript;
     languageCode = result.languageCode;
@@ -125,19 +201,8 @@ export async function transcribeAudioFile({
       }
     }
   } finally {
-    // Clean up audio file if it was created from video conversion
-    if (audioFilePath) {
-      console.log("cleaning up converted audio file:", audioFilePath);
-      await Deno.remove(audioFilePath).catch(() => {});
-      const audioDir = audioFilePath.substring(
-        0,
-        audioFilePath.lastIndexOf("/"),
-      );
-      await Deno.remove(audioDir).catch(() => {});
-    }
-
-    // Clean up original temp file if no audio conversion was done
-    if (tempFilePath && !audioFilePath) {
+    // Clean up temp file
+    if (tempFilePath) {
       if (!isGoogleDrive) {
         // Clean up Slack-downloaded files
         console.log("cleaning up temp file:", tempFilePath);

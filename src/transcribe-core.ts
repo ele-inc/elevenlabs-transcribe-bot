@@ -8,7 +8,6 @@ import {
   extractSentences,
   groupBySpeaker,
   isVideoFile,
-  convertVideoToAudio,
 } from "./utils.ts";
 import { identifySpeakers, replaceSpeakerLabels } from "./openai-client.ts";
 import { config } from "./config.ts";
@@ -24,28 +23,120 @@ export interface TranscriptionResult {
 }
 
 
+
 /**
- * Core transcription function that is platform-independent
- * @param fileData - The audio/video file data as Uint8Array
- * @param mimeType - MIME type of the file
+ * Transcribe a file from disk using streaming (memory efficient)
+ * @param filePath - Path to the audio/video file
  * @param options - Transcription options
  * @returns Transcription result
  */
-export async function transcribeCore(
-  fileData: Uint8Array,
-  mimeType: string,
+export async function transcribeFile(
+  filePath: string,
   options: TranscriptionOptions
 ): Promise<TranscriptionResult> {
-  console.log("Calling ElevenLabs API with options:", options);
+  // Determine MIME type based on file extension
+  const extension = filePath.split('.').pop()?.toLowerCase() || '';
+  const mimeType = getMimeType(extension);
 
-  // Create blob from file data
-  // Always use audio/mpeg for converted video files
-  const blobType = isVideoFile(mimeType) ? "audio/mpeg" : mimeType;
-  const fileBlob = new Blob([fileData], { type: blobType });
+  // Check if the file is a video
+  if (isVideoFile(mimeType)) {
+    console.log("Detected video file, streaming conversion to MP3...");
+    
+    // Use ffmpeg streaming conversion (no temp files)
+    const command = new Deno.Command("ffmpeg", {
+      args: [
+        "-i", filePath,           // Input file
+        "-vn",                    // No video
+        "-acodec", "libmp3lame",  // MP3 encoder
+        "-ab", "128k",            // Bitrate
+        "-ar", "16000",           // Sample rate
+        "-ac", "1",               // Mono
+        "-f", "mp3",              // Output format
+        "pipe:1"                  // Output to stdout
+      ],
+      stdout: "piped",
+      stderr: "piped",
+    });
+    
+    const process = command.spawn();
+    
+    // Handle ffmpeg errors in background
+    (async () => {
+      const decoder = new TextDecoder();
+      const errorReader = process.stderr.getReader();
+      try {
+        while (true) {
+          const { done, value } = await errorReader.read();
+          if (done) break;
+          const text = decoder.decode(value);
+          if (text.includes("Error") || text.includes("error")) {
+            console.error("ffmpeg error:", text);
+          }
+        }
+      } finally {
+        errorReader.releaseLock();
+      }
+    })();
+    
+    // Convert stream to blob for ElevenLabs API
+    const chunks: Uint8Array[] = [];
+    const reader = process.stdout.getReader();
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    
+    const audioBlob = new Blob(chunks, { type: "audio/mpeg" });
+    console.log(`Audio size: ${(audioBlob.size / 1024 / 1024).toFixed(2)}MB`);
+    
+    // Call ElevenLabs API
+    return await transcribeFromBlob(audioBlob, options);
+    
+  } else {
+    // For audio files, stream directly
+    console.log("Streaming audio file...");
+    const file = await Deno.open(filePath, { read: true });
+    
+    try {
+      // Read file in chunks and build blob
+      const chunks: Uint8Array[] = [];
+      const reader = file.readable.getReader();
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      
+      const audioBlob = new Blob(chunks, { type: mimeType });
+      console.log(`Audio size: ${(audioBlob.size / 1024 / 1024).toFixed(2)}MB`);
+      
+      // Call ElevenLabs API
+      return await transcribeFromBlob(audioBlob, options);
+    } finally {
+      file.close();
+    }
+  }
+}
 
+/**
+ * Helper function to transcribe from Blob
+ */
+async function transcribeFromBlob(
+  audioBlob: Blob,
+  options: TranscriptionOptions
+): Promise<TranscriptionResult> {
+  console.log("Calling ElevenLabs API with audio blob...");
+  
   // Call ElevenLabs API
   const scribeResult = await elevenlabs.speechToText.convert({
-    file: fileBlob,
+    file: audioBlob,
     model_id: "scribe_v1",
     tag_audio_events: options.tagAudioEvents,
     diarize: options.diarize,
@@ -96,7 +187,6 @@ export async function transcribeCore(
       console.log("Speaker labels replaced successfully");
     } catch (error) {
       console.error("Failed to identify speakers:", error);
-      // Continue with original transcript if speaker identification fails
     }
   }
 
@@ -107,53 +197,6 @@ export async function transcribeCore(
     languageCode,
     words,
   };
-}
-
-/**
- * Transcribe a file from disk
- * @param filePath - Path to the audio/video file
- * @param options - Transcription options
- * @returns Transcription result
- */
-export async function transcribeFile(
-  filePath: string,
-  options: TranscriptionOptions
-): Promise<TranscriptionResult> {
-  let processedFilePath = filePath;
-  let audioFilePath: string | null = null;
-
-  try {
-    // Determine MIME type based on file extension
-    const extension = filePath.split('.').pop()?.toLowerCase() || '';
-    const mimeType = getMimeType(extension);
-
-    // Check if the file is a video and convert to MP3 if needed
-    if (isVideoFile(mimeType)) {
-      console.log("Detected video file, converting to MP3...");
-      audioFilePath = await convertVideoToAudio(filePath);
-      processedFilePath = audioFilePath;
-      console.log("Conversion complete:", audioFilePath);
-    }
-
-    // Read the processed file (original audio or converted MP3)
-    const fileData = await Deno.readFile(processedFilePath);
-
-    // Use the appropriate MIME type
-    const finalMimeType = audioFilePath ? "audio/mpeg" : mimeType;
-
-    // Call the core transcription function
-    const result = await transcribeCore(fileData, finalMimeType, options);
-
-    return result;
-  } finally {
-    // Clean up converted audio file if it was created
-    if (audioFilePath) {
-      console.log("Cleaning up converted audio file:", audioFilePath);
-      await Deno.remove(audioFilePath).catch(() => {});
-      const audioDir = audioFilePath.substring(0, audioFilePath.lastIndexOf("/"));
-      await Deno.remove(audioDir).catch(() => {});
-    }
-  }
 }
 
 function getMimeType(extension: string): string {

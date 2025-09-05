@@ -18,9 +18,9 @@ import {
   downloadDiscordFile,
   getDiscordFileInfo,
 } from "./discord.ts";
-import { transcribeAudioFile } from "./scribe.ts";
+import { transcribeAudioFile, transcribeAudioFromStream } from "./scribe.ts";
 import { parseTranscriptionOptions, extractGoogleDriveUrls } from "./utils.ts";
-import { downloadGoogleDriveFile } from "./googledrive.ts";
+import { GoogleDriveStreamer, parseGoogleDriveUrl } from "./googledrive-stream.ts";
 
 // Handle Discord interactions
 export async function handleDiscordInteraction(request: Request): Promise<Response> {
@@ -253,7 +253,7 @@ async function processDiscordTranscription(
   }
 }
 
-// Process Google Drive file for Discord
+// Process Google Drive file for Discord (Streaming version)
 async function processGoogleDriveTranscription(
   interaction: APIInteraction,
   url: string,
@@ -262,12 +262,22 @@ async function processGoogleDriveTranscription(
   const channelId = interaction.channel?.id || "";
 
   try {
-    // Create temporary file path
-    const tempDir = await Deno.makeTempDir();
-    const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
+    // Parse Google Drive URL
+    const fileId = parseGoogleDriveUrl(url);
+    if (!fileId) {
+      await editInteractionReply(
+        interaction.token,
+        `❌ 無効なGoogle Drive URLです。`
+      );
+      return;
+    }
 
-    // Download and get metadata
-    const { filename, mimeType } = await downloadGoogleDriveFile(url, tempPath);
+    // Initialize Google Drive streamer
+    const streamer = new GoogleDriveStreamer();
+
+    // Get file metadata
+    const metadata = await streamer.getFileMetadata(fileId);
+    const { name: filename, mimeType } = metadata;
 
     // Check if it's an audio/video file
     if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
@@ -275,9 +285,6 @@ async function processGoogleDriveTranscription(
         interaction.token,
         `❌ ファイル "${filename}" は音声または動画ファイルではありません。`
       );
-      // Clean up
-      await Deno.remove(tempPath).catch(() => {});
-      await Deno.remove(tempDir).catch(() => {});
       return;
     }
 
@@ -287,22 +294,36 @@ async function processGoogleDriveTranscription(
       `🎵 Google Driveファイル "${filename}" を文字起こし中...`
     );
 
-    // Transcribe
-    const fileURL = `file://${tempPath}`;
+    // Get audio stream (converts video to audio if needed)
+    let audioStream: ReadableStream<Uint8Array>;
+    let processingDone: Promise<void>;
+    
+    if (mimeType.startsWith("video/")) {
+      console.log("Streaming video to audio conversion...");
+      const result = await streamer.streamVideoToAudio(fileId);
+      audioStream = result.stream;
+      processingDone = result.done;
+    } else {
+      console.log("Streaming audio directly...");
+      const result = await streamer.streamAudio(fileId);
+      audioStream = result.stream;
+      processingDone = result.done;
+    }
 
-    await transcribeAudioFile({
-      fileURL,
-      fileType: mimeType,
-      duration: 0,
+    // Transcribe from stream
+    const transcribePromise = transcribeAudioFromStream({
+      audioStream,
+      fileType: "audio/mpeg", // Always MP3 after conversion
       channelId,
       timestamp: interaction.id,
       userId: interaction.member?.user?.id || interaction.user?.id || "",
       options,
       filename,
-      isGoogleDrive: true,
-      tempPath,
       platform: "discord",
     });
+
+    // 両方の完了を待つ
+    await Promise.all([transcribePromise, processingDone]);
 
     // Final success message
     await editInteractionReply(
@@ -310,7 +331,7 @@ async function processGoogleDriveTranscription(
       `✅ "${filename}" の文字起こしが完了しました！`
     );
   } catch (error) {
-    console.error("Google Drive processing error:", error);
+    console.error("Google Drive streaming error:", error);
     await editInteractionReply(
       interaction.token,
       `❌ Google Driveファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : "Unknown error"}`
