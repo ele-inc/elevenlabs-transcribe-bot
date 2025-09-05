@@ -19,8 +19,13 @@ import {
   getDiscordFileInfo,
 } from "./discord.ts";
 import { transcribeAudioFile } from "./scribe.ts";
-import { parseTranscriptionOptions, extractGoogleDriveUrls } from "./utils.ts";
-import { downloadGoogleDriveFile } from "./googledrive.ts";
+import { parseTranscriptionOptions } from "./utils.ts";
+import {
+  extractCloudStorageUrls,
+  downloadCloudFile,
+  getProviderDisplayName,
+  CloudStorageUrl,
+} from "./cloud-storage.ts";
 
 // Handle Discord interactions
 export async function handleDiscordInteraction(request: Request): Promise<Response> {
@@ -168,12 +173,12 @@ function handleMessageCommand(
     return mimeType?.startsWith("audio/") || mimeType?.startsWith("video/");
   });
 
-  // Check for Google Drive URLs in message content
-  const googleDriveUrls = extractGoogleDriveUrls(message.content || "");
+  // Check for cloud storage URLs in message content
+  const cloudUrls = extractCloudStorageUrls(message.content || "");
 
-  if ((!audioVideoAttachments || audioVideoAttachments.length === 0) && googleDriveUrls.length === 0) {
+  if ((!audioVideoAttachments || audioVideoAttachments.length === 0) && cloudUrls.length === 0) {
     return replyToInteraction(
-      "このメッセージには音声/動画ファイルまたはGoogle DriveのURLが含まれていません。",
+      "このメッセージには音声/動画ファイルまたはクラウドストレージのURLが含まれていません。",
       true,
     );
   }
@@ -184,9 +189,9 @@ function handleMessageCommand(
   // Process each file/URL in background
   Promise.resolve().then(async () => {
     try {
-      if (googleDriveUrls.length > 0) {
-        for (const url of googleDriveUrls) {
-          await processGoogleDriveTranscription(interaction, url, {
+      if (cloudUrls.length > 0) {
+        for (const cloudUrl of cloudUrls) {
+          await processCloudStorageTranscription(interaction, cloudUrl, {
             diarize: true,
             showTimestamp: true,
             tagAudioEvents: true
@@ -225,16 +230,16 @@ async function processDiscordTranscription(
   }
 ) {
   try {
-    // Handle Google Drive URL
+    // Handle cloud storage URL
     if (params.url) {
-      const googleDriveUrls = extractGoogleDriveUrls(params.url);
+      const cloudUrls = extractCloudStorageUrls(params.url);
 
-      if (googleDriveUrls.length > 0) {
-        await processGoogleDriveTranscription(interaction, googleDriveUrls[0], params.options);
+      if (cloudUrls.length > 0) {
+        await processCloudStorageTranscription(interaction, cloudUrls[0], params.options);
       } else {
         await editInteractionReply(
           interaction.token,
-          "❌ 有効なGoogle DriveのURLが見つかりません。"
+          "❌ 有効なクラウドストレージのURLが見つかりません。"
         );
       }
       return;
@@ -253,10 +258,10 @@ async function processDiscordTranscription(
   }
 }
 
-// Process Google Drive file for Discord
-async function processGoogleDriveTranscription(
+// Process cloud storage file for Discord
+async function processCloudStorageTranscription(
   interaction: APIInteraction,
-  url: string,
+  cloudUrl: CloudStorageUrl,
   options: TranscriptionOptions
 ) {
   const channelId = interaction.channel?.id || "";
@@ -264,10 +269,11 @@ async function processGoogleDriveTranscription(
   try {
     // Create temporary file path
     const tempDir = await Deno.makeTempDir();
-    const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
+    const tempPath = `${tempDir}/cloud_${Date.now()}.tmp`;
 
     // Download and get metadata
-    const { filename, mimeType } = await downloadGoogleDriveFile(url, tempPath);
+    const { filename, mimeType, provider } = await downloadCloudFile(cloudUrl.originalUrl, tempPath);
+    const providerName = getProviderDisplayName(provider);
 
     // Check if it's an audio/video file
     if (!mimeType.startsWith("audio/") && !mimeType.startsWith("video/")) {
@@ -284,7 +290,7 @@ async function processGoogleDriveTranscription(
     // Update status
     await editInteractionReply(
       interaction.token,
-      `🎵 Google Driveファイル "${filename}" を文字起こし中...`
+      `🎵 ${providerName}ファイル "${filename}" を文字起こし中...`
     );
 
     // Transcribe
@@ -299,7 +305,7 @@ async function processGoogleDriveTranscription(
       userId: interaction.member?.user?.id || interaction.user?.id || "",
       options,
       filename,
-      isGoogleDrive: true,
+      isGoogleDrive: true, // Reuse flag for external file handling
       tempPath,
       platform: "discord",
     });
@@ -310,10 +316,10 @@ async function processGoogleDriveTranscription(
       `✅ "${filename}" の文字起こしが完了しました！`
     );
   } catch (error) {
-    console.error("Google Drive processing error:", error);
+    console.error("Cloud storage processing error:", error);
     await editInteractionReply(
       interaction.token,
-      `❌ Google Driveファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : "Unknown error"}`
+      `❌ ${cloudUrl.provider === "google-drive" ? "Google Drive" : "Dropbox"}ファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
