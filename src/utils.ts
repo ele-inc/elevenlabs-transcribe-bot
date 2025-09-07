@@ -167,17 +167,16 @@ export const convertVideoToAudio = async (
 
     console.log(`Converting video to audio: ${inputPath} -> ${outputPath}`);
 
-    // ffmpegコマンドで動画から音声を抽出
+    // ffmpegコマンドで動画から音声を抽出（バランス重視版）
     const command = new Deno.Command("ffmpeg", {
       args: [
-        "-i", inputPath,
-        "-vn",
-        "-ac", "1",                 // mono
-        "-ar", "16000",             // 16 kHz
-        "-af", "loudnorm=I=-23:TP=-2:LRA=11,highpass=f=60",
-        "-c:a", "pcm_s16le",        // 16-bit PCM, little-endian
-        "-y",
-        outputPath
+        "-i", inputPath,                          // 入力
+        "-vn",                                    // 映像は無視
+        "-af",
+        // 最小限の前処理：低域ノイズカット → クリップ防止のみ
+        "highpass=f=60,alimiter=limit=0.95",      // limitは振幅(0〜1)。0.95 ≈ -0.45 dBFS
+        "-c:a", "pcm_s16le",                      // 非圧縮16bit PCM（WAV相当）
+        "-y", outputPath
       ],
       stdout: "piped",
       stderr: "piped",
