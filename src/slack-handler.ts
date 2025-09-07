@@ -5,16 +5,12 @@
 
 import { SlackEvent } from "./types.ts";
 import { parseTranscriptionOptions } from "./utils.ts";
-import { sendSlackMessage } from "./slack.ts";
-import { transcribeAudioFile } from "./scribe.ts";
 import { textResponse, okResponse, badRequest } from "./http-utils.ts";
 import { 
-  processGoogleDriveFile, 
-  extractMediaInfo, 
-  isValidAudioVideoFile,
-  formatOptionsText 
+  extractMediaInfo
 } from "./file-processor.ts";
 import { createPlatformAdapter } from "./platform-adapter.ts";
+import { TranscriptionProcessor, FileAttachment } from "./transcription-processor.ts";
 
 // Set to track processed events (with size limit to prevent memory leak)
 const processedEvents = new Set<string>();
@@ -57,65 +53,60 @@ export async function handleAppMention(event: SlackEvent) {
     return;
   }
 
-  // Process Google Drive URLs first
-  for (const driveUrl of googleDriveUrls) {
-    const adapter = createPlatformAdapter("slack", {
-      channelId: event.channel,
-      threadTimestamp: event.ts,
-    });
+  // Create adapter and processor
+  const adapter = createPlatformAdapter("slack", {
+    channelId: event.channel,
+    threadTimestamp: event.ts,
+  });
 
+  const processor = new TranscriptionProcessor(adapter, {
+    channelId: event.channel,
+    timestamp: event.ts,
+    userId: event.user,
+    platform: "slack",
+  });
+
+  // Process Google Drive URLs first
+  if (googleDriveUrls.length > 0) {
     // Process asynchronously without blocking response
-    processGoogleDriveFile(driveUrl, {
-      channelId: event.channel,
-      timestamp: event.ts,
-      userId: event.user,
-      transcriptionOptions: options,
-      platform: "slack",
-    }).then(async (result) => {
-      if (result.success && result.filename) {
-        const processingMessage = `Google Driveファイル "${result.filename}" を受信しました。文字起こし中${formatOptionsText(options)}...`;
-        await adapter.sendStatusMessage(processingMessage);
-      } else if (!result.success && result.error !== "File is not a media file") {
-        await adapter.sendErrorMessage(result.error || "Unknown error");
-      }
-    }).catch(console.error);
+    processor.processTextInput(event.text || "", options)
+      .catch(console.error)
+      .finally(() => processor.cleanup());
   }
 
-    // Process regular Slack files
-    if (event.files && event.files.length > 0) {
-      for (const file of event.files) {
-        // Check if file is not audio or video
-        if (!isValidAudioVideoFile(file.mimetype)) {
-          await sendSlackMessage(
-            event.channel,
-            `ファイル "${file.name}" は音声または動画ファイルではありません。`,
-            event.ts,
-          );
-          continue;
-        }
+  // Process regular Slack files
+  if (event.files && event.files.length > 0) {
+    const attachments: FileAttachment[] = event.files.map(file => ({
+      url: file.url_private || "",
+      filename: file.name,
+      mimeType: file.mimetype,
+      duration: file.duration,
+    }));
 
-        // Reply with file info including options
-        const adapter = createPlatformAdapter("slack", {
-          channelId: event.channel,
-          threadTimestamp: event.ts,
-        });
-        
-        const processingMessage = adapter.formatProcessingMessage(file.name, options);
-        await adapter.sendStatusMessage(processingMessage);
+    // If processor wasn't created for Google Drive URLs, create it now
+    if (googleDriveUrls.length === 0) {
+      const adapter = createPlatformAdapter("slack", {
+        channelId: event.channel,
+        threadTimestamp: event.ts,
+      });
 
-        // Process transcription asynchronously without blocking response
-        transcribeAudioFile({
-          fileURL: file.url_private || "",
-          fileType: file.mimetype || "",
-          duration: file.duration || 0,
-          channelId: event.channel,
-          timestamp: event.ts,
-          userId: event.user,
-          options,
-          filename: file.name,
-        }).catch(console.error);
-      }
+      const processor = new TranscriptionProcessor(adapter, {
+        channelId: event.channel,
+        timestamp: event.ts,
+        userId: event.user,
+        platform: "slack",
+      });
+
+      // Process asynchronously without blocking response
+      processor.processAttachments(attachments, options)
+        .catch(console.error)
+        .finally(() => processor.cleanup());
+    } else {
+      // Use existing processor
+      processor.processAttachments(attachments, options)
+        .catch(console.error);
     }
+  }
 }
 
 /**

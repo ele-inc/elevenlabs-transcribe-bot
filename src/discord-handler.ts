@@ -18,14 +18,14 @@ import {
   downloadDiscordFile,
   getDiscordFileInfo,
 } from "./discord.ts";
-import { transcribeAudioFile } from "./scribe.ts";
 import { parseTranscriptionOptions } from "./utils.ts";
 import { 
-  processGoogleDriveFile, 
   extractMediaInfo, 
   isValidAudioVideoFile
 } from "./file-processor.ts";
 import { createPlatformAdapter } from "./platform-adapter.ts";
+import { TranscriptionProcessor } from "./transcription-processor.ts";
+import { TempFileManager } from "./temp-file-manager.ts";
 
 // Handle Discord interactions
 export async function handleDiscordInteraction(request: Request): Promise<Response> {
@@ -228,9 +228,17 @@ async function processDiscordTranscription(
     options: TranscriptionOptions;
   }
 ) {
+  const channelId = interaction.channel?.id || "";
   const adapter = createPlatformAdapter("discord", {
-    channelId: interaction.channel?.id || "",
+    channelId,
     interaction,
+  });
+
+  const processor = new TranscriptionProcessor(adapter, {
+    channelId,
+    timestamp: interaction.id,
+    userId: interaction.member?.user?.id || interaction.user?.id || "",
+    platform: "discord",
   });
 
   try {
@@ -239,7 +247,7 @@ async function processDiscordTranscription(
       const { googleDriveUrls } = extractMediaInfo(params.url);
 
       if (googleDriveUrls.length > 0) {
-        await processGoogleDriveTranscription(interaction, googleDriveUrls[0], params.options);
+        await processor.processGoogleDriveUrl(googleDriveUrls[0], params.options);
       } else {
         await adapter.sendErrorMessage("有効なGoogle DriveのURLが見つかりません。");
       }
@@ -253,6 +261,8 @@ async function processDiscordTranscription(
   } catch (error) {
     console.error("Discord transcription error:", error);
     await adapter.sendErrorMessage(error instanceof Error ? error.message : "Unknown error");
+  } finally {
+    await processor.cleanup();
   }
 }
 
@@ -268,37 +278,22 @@ async function processGoogleDriveTranscription(
     interaction,
   });
 
+  const processor = new TranscriptionProcessor(adapter, {
+    channelId,
+    timestamp: interaction.id,
+    userId: interaction.member?.user?.id || interaction.user?.id || "",
+    platform: "discord",
+  });
+
   try {
-    const result = await processGoogleDriveFile(url, {
-      channelId,
-      timestamp: interaction.id,
-      userId: interaction.member?.user?.id || interaction.user?.id || "",
-      transcriptionOptions: options,
-      platform: "discord",
-    });
-
-    if (!result.success) {
-      if (result.error === "File is not a media file") {
-        return; // Silently skip non-media files
-      }
-      await adapter.sendErrorMessage(`Google Driveファイルの処理中にエラーが発生しました: ${result.error}`);
-      return;
-    }
-
-    if (result.filename) {
-      // Update status
-      await adapter.sendStatusMessage(
-        adapter.formatProcessingMessage(`Google Driveファイル "${result.filename}"`, options)
-      );
-
-      // Final success message
-      await adapter.sendSuccessMessage(result.filename);
-    }
+    await processor.processGoogleDriveUrl(url, options);
   } catch (error) {
     console.error("Google Drive processing error:", error);
     await adapter.sendErrorMessage(
       `Google Driveファイルの処理中にエラーが発生しました: ${error instanceof Error ? error.message : "Unknown error"}`
     );
+  } finally {
+    await processor.cleanup();
   }
 }
 
@@ -314,22 +309,24 @@ async function processDiscordAttachment(
     interaction,
   });
 
+  const tempManager = new TempFileManager();
+
   try {
     // Download the file
     const fileData = await downloadDiscordFile(attachment.url);
 
     // Create temporary file
-    const tempDir = await Deno.makeTempDir();
     const fileInfo = getDiscordFileInfo(attachment.url);
-    const tempPath = `${tempDir}/${fileInfo.name}`;
-
-    // Write to temp file
-    await Deno.writeFile(tempPath, fileData);
+    const extension = fileInfo.name.split('.').pop() || 'tmp';
+    const tempPath = await tempManager.writeToTempFile(fileData, "discord", extension);
 
     // Update status
     await adapter.sendStatusMessage(
       adapter.formatProcessingMessage(attachment.filename, options)
     );
+
+    // Import transcribeAudioFile locally to avoid circular dependency
+    const { transcribeAudioFile } = await import("./scribe.ts");
 
     // Transcribe
     const fileURL = `file://${tempPath}`;
@@ -347,10 +344,6 @@ async function processDiscordAttachment(
       platform: "discord",
     });
 
-    // Clean up
-    await Deno.remove(tempPath).catch(() => {});
-    await Deno.remove(tempDir).catch(() => {});
-
     // Final success message
     await adapter.sendSuccessMessage(attachment.filename);
   } catch (error) {
@@ -358,5 +351,7 @@ async function processDiscordAttachment(
     await adapter.sendErrorMessage(
       error instanceof Error ? error.message : "Unknown error"
     );
+  } finally {
+    await tempManager.cleanupAll();
   }
 }
