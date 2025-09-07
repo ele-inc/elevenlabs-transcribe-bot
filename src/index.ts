@@ -1,5 +1,6 @@
 import { handleDiscordInteraction } from "./discord-handler.ts";
 import { handleSlackEvents } from "./slack-handler.ts";
+import { handleDriveEvents } from "./drive-events-handler.ts";
 import { config } from "./config.ts";
 import { textResponse, methodNotAllowed } from "./http-utils.ts";
 
@@ -29,6 +30,12 @@ Deno.serve({ port }, async (req) => {
   // Slack endpoint
   if (pathname === "/slack/events" && req.method === "POST") {
     return await handleSlackEvents(req);
+  }
+
+  // Drive Events endpoint (from Eventarc)
+  if (pathname === "/events" && req.method === "POST") {
+    console.log("Drive Events request detected");
+    return await handleDriveEvents(req);
   }
 
   return methodNotAllowed(['GET', 'POST']);

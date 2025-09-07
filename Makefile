@@ -61,6 +61,39 @@ transcribe:
 	@echo "🎙️ Transcribing file: $(FILE)"
 	@deno run --allow-all src/cli.ts $(FILE) $(ARGS)
 
+# Workspace Events Subscription Management
+subscription-list:
+	@echo "📋 Listing Workspace Events subscriptions..."
+	@curl -s -X GET "https://workspaceevents.googleapis.com/v1beta/subscriptions?filter=target_resource%3D%22%2F%2Fdrive.googleapis.com%2Ffiles%2F$(DRIVE_INPUT_FOLDER_ID)%22" \
+		-H "Authorization: Bearer $$(gcloud auth application-default print-access-token)" | jq '.'
+
+subscription-delete:
+	@if [ -z "$(SUBSCRIPTION_NAME)" ]; then \
+		echo "Error: SUBSCRIPTION_NAME parameter is required"; \
+		echo "Usage: make subscription-delete SUBSCRIPTION_NAME=subscriptions/drive-file-xxx"; \
+		exit 1; \
+	fi
+	@echo "🗑️ Deleting subscription: $(SUBSCRIPTION_NAME)..."
+	@curl -X DELETE "https://workspaceevents.googleapis.com/v1beta/subscriptions/$(SUBSCRIPTION_NAME)" \
+		-H "Authorization: Bearer $$(gcloud auth application-default print-access-token)"
+
+subscription-create:
+	@echo "✨ Creating new Workspace Events subscription..."
+	@ACCESS_TOKEN=$$(gcloud auth application-default print-access-token) && \
+	curl -X POST "https://workspaceevents.googleapis.com/v1beta/subscriptions" \
+		-H "Authorization: Bearer $${ACCESS_TOKEN}" \
+		-H "Content-Type: application/json" \
+		-H "X-Goog-User-Project: 804300863743" \
+		-d '{ \
+			"targetResource": "//drive.googleapis.com/files/$(DRIVE_INPUT_FOLDER_ID)", \
+			"eventTypes": ["google.workspace.drive.file.v3.created"], \
+			"payloadOptions": {"includeResource": false}, \
+			"notificationEndpoint": { \
+				"pubsubTopic": "projects/$(GCP_PROJECT_ID)/topics/drive-events-topic-1757063322" \
+			}, \
+			"driveOptions": {"includeDescendants": true} \
+		}' | jq '.'
+
 # Help
 help:
 	@echo "Available commands:"
@@ -74,4 +107,11 @@ help:
 	@echo "  make logs        - Show recent Cloud Run logs"
 	@echo "  make transcribe  - Transcribe audio/video files locally"
 	@echo "                     Usage: make transcribe FILE=path/to/file [ARGS='options']"
+	@echo ""
+	@echo "Workspace Events Management:"
+	@echo "  make subscription-list   - List all Workspace Events subscriptions"
+	@echo "  make subscription-delete - Delete a subscription"
+	@echo "                            Usage: make subscription-delete SUBSCRIPTION_NAME=subscriptions/xxx"
+	@echo "  make subscription-create - Create new subscription for Drive events"
+	@echo ""
 	@echo "  make help        - Show this help message"
