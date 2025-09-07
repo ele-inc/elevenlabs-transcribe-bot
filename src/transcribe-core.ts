@@ -51,7 +51,7 @@ export async function transcribeCore(
     diarize: options.diarize,
     language_code: "ja",
     ...(options.diarize && options.numSpeakers ? { num_speakers: options.numSpeakers } : {}),
-  }, { timeoutInSeconds: 180 });
+  }, { timeoutInSeconds: 3600 });
 
   const words: WordItem[] | undefined = (scribeResult as { words?: WordItem[] }).words;
   let transcript = "";
