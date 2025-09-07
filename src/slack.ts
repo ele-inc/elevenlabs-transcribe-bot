@@ -35,10 +35,7 @@ export async function uploadTranscriptToSlack(
     .slice(0, 15);
   const transcriptFilename = `transcript_${fileTimestamp}.txt`;
 
-  console.log("Using Slack Files API v2");
-
   const fileBytes = new TextEncoder().encode(transcript);
-  console.log("File size:", fileBytes.length, "bytes");
 
   const formData1 = new FormData();
   formData1.append("filename", transcriptFilename);
@@ -56,10 +53,6 @@ export async function uploadTranscriptToSlack(
   );
 
   const uploadUrlResult = await uploadUrlResponse.json();
-  console.log(
-    "Upload URL response:",
-    JSON.stringify(uploadUrlResult, null, 2),
-  );
 
   if (!uploadUrlResult.ok) {
     throw new Error(`Failed to get upload URL: ${uploadUrlResult.error}`);
@@ -100,11 +93,6 @@ export async function uploadTranscriptToSlack(
   );
 
   const completeResult = await completeResponse.json();
-  console.log(
-    "Complete upload response:",
-    JSON.stringify(completeResult, null, 2),
-  );
-
   if (!completeResult.ok) {
     throw new Error(`Failed to complete upload: ${completeResult.error}`);
   }

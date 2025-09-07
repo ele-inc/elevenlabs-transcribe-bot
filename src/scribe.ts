@@ -83,8 +83,6 @@ export async function transcribeAudioFile({
       await Deno.remove(originalVideoPath);
     }
 
-    console.log("calling transcribe-core with options:", options);
-
     // Read file into memory
     const fileData = await Deno.readFile(tempFilePath);
 
@@ -93,7 +91,7 @@ export async function transcribeAudioFile({
 
     // Call the core transcription function
     const result = await transcribeCore(fileData, mimeType, options);
-    
+
     transcript = result.transcript;
     languageCode = result.languageCode;
 

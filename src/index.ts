@@ -13,7 +13,6 @@ Deno.serve({ port }, async (req) => {
 
   // Log incoming request for debugging
   console.log("Incoming request method:", req.method);
-  console.log("Incoming request URL:", req.url);
   console.log("Path:", pathname);
 
   // Health check endpoint
