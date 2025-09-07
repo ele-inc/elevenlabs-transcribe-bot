@@ -35,3 +35,16 @@ node_modules/
 .deno/
 
 transcripts
+
+*.webm
+*.mp4
+*.mp3
+*.wav
+*.m4a
+*.m4v
+*.mov
+*.avi
+*.mkv
+*.flv
+*.wmv
+*.m3u8
