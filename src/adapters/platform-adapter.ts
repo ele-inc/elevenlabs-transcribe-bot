@@ -12,6 +12,14 @@ export interface PlatformAdapter {
   formatProcessingMessage(filename: string, options: TranscriptionOptions): string;
 }
 
+/**
+ * Common implementation for formatting processing message
+ */
+function formatProcessingMessageCommon(filename: string, options: TranscriptionOptions): string {
+  const optionsText = formatOptionsText(options);
+  return `ファイル "${filename}" を受信しました。文字起こし中${optionsText}...`;
+}
+
 export class SlackAdapter implements PlatformAdapter {
   constructor(
     private channelId: string,
@@ -57,8 +65,7 @@ export class SlackAdapter implements PlatformAdapter {
   }
 
   formatProcessingMessage(filename: string, options: TranscriptionOptions): string {
-    const optionsText = formatOptionsText(options);
-    return `ファイル "${filename}" を受信しました。文字起こし中${optionsText}...`;
+    return formatProcessingMessageCommon(filename, options);
   }
 }
 
@@ -105,8 +112,7 @@ export class DiscordAdapter implements PlatformAdapter {
   }
 
   formatProcessingMessage(filename: string, options: TranscriptionOptions): string {
-    const optionsText = formatOptionsText(options);
-    return `🎵 "${filename}" を文字起こし中${optionsText ? optionsText : ""}...`;
+    return formatProcessingMessageCommon(filename, options);
   }
 }
 
