@@ -8,8 +8,8 @@ import { transcribeAudioFile } from "./scribe.ts";
 import { TempFileManager } from "./temp-file-manager.ts";
 import { processGoogleDriveFile, isValidAudioVideoFile, extractMediaInfo } from "./file-processor.ts";
 import { PlatformAdapter } from "./platform-adapter.ts";
-import { downloadSlackFileToPath } from "./slack.ts";
 import { getFileExtensionFromMime } from "./utils.ts";
+import { FileDownloader } from "./services/file-downloader.ts";
 
 export interface FileAttachment {
   url: string;
@@ -117,10 +117,16 @@ export class TranscriptionProcessor {
         this.adapter.formatProcessingMessage(attachment.filename, options)
       );
 
-      // For Slack files, download directly to temp
+      // For Slack files, download directly to temp using unified downloader
       const extension = getFileExtensionFromMime(attachment.mimeType || "");
       tempPath = await this.tempManager.createTempFile("audio", extension);
-      await downloadSlackFileToPath(attachment.url, tempPath);
+      
+      const fileDownloader = new FileDownloader();
+      await fileDownloader.downloadToPath({
+        platform: "slack",
+        url: attachment.url,
+        outputPath: tempPath
+      });
 
       // Transcribe
       const fileURL = `file://${tempPath}`;

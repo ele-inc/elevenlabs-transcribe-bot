@@ -15,7 +15,6 @@ import {
   replyToInteraction,
   deferInteractionReply,
   editInteractionReply,
-  downloadDiscordFile,
   getDiscordFileInfo,
 } from "./discord.ts";
 import { parseTranscriptionOptions } from "./utils.ts";
@@ -26,6 +25,7 @@ import {
 import { createPlatformAdapter } from "./platform-adapter.ts";
 import { TranscriptionProcessor } from "./transcription-processor.ts";
 import { TempFileManager } from "./temp-file-manager.ts";
+import { FileDownloader } from "./services/file-downloader.ts";
 
 // Handle Discord interactions
 export async function handleDiscordInteraction(request: Request): Promise<Response> {
@@ -310,15 +310,18 @@ async function processDiscordAttachment(
   });
 
   const tempManager = new TempFileManager();
+  const fileDownloader = new FileDownloader();
 
   try {
-    // Download the file
-    const fileData = await downloadDiscordFile(attachment.url);
+    // Download the file using unified downloader
+    const downloadResult = await fileDownloader.downloadToMemory({
+      platform: "discord",
+      url: attachment.url
+    });
 
     // Create temporary file
-    const fileInfo = getDiscordFileInfo(attachment.url);
-    const extension = fileInfo.name.split('.').pop() || 'tmp';
-    const tempPath = await tempManager.writeToTempFile(fileData, "discord", extension);
+    const extension = downloadResult.metadata.filename.split('.').pop() || 'tmp';
+    const tempPath = await tempManager.writeToTempFile(downloadResult.data, "discord", extension);
 
     // Update status
     await adapter.sendStatusMessage(

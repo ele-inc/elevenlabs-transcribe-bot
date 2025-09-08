@@ -1,5 +1,5 @@
 import { TranscriptionOptions, WordItem, Sentence, SpeakerUtterance } from "./types.ts";
-import { isGoogleDriveUrl } from "./googledrive.ts";
+import { FileDownloader } from "./services/file-downloader.ts";
 
 export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptions => {
   const diarize = !text.includes("--no-diarize");
@@ -148,7 +148,7 @@ export const groupBySpeaker = (words: WordItem[]): SpeakerUtterance[] => {
 export const extractGoogleDriveUrls = (text: string): string[] => {
   const urlPattern = /https?:\/\/[^\s<>]+/gi;
   const urls = text.match(urlPattern) || [];
-  return urls.filter(url => isGoogleDriveUrl(url));
+  return urls.filter(url => FileDownloader.isGoogleDriveUrl(url));
 };
 
 /**

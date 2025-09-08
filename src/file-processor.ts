@@ -1,7 +1,7 @@
 import { TranscriptionOptions } from "./types.ts";
-import { downloadGoogleDriveFile } from "./googledrive.ts";
 import { transcribeAudioFile } from "./scribe.ts";
 import { extractGoogleDriveUrls } from "./utils.ts";
+import { FileDownloader } from "./services/file-downloader.ts";
 
 export interface FileInfo {
   filename: string;
@@ -56,18 +56,25 @@ export async function processGoogleDriveFile(
     const tempDir = await Deno.makeTempDir();
     const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
 
-    const result = await downloadGoogleDriveFile(url, tempPath);
-    
-    if (!result) {
-      await Deno.remove(tempDir).catch(() => {});
-      return { success: false, error: "File is not a media file" };
+    // Extract file ID from URL
+    const fileId = FileDownloader.parseGoogleDriveUrl(url);
+    if (!fileId) {
+      return { success: false, error: "Invalid Google Drive URL" };
     }
+
+    // Download using unified downloader
+    const fileDownloader = new FileDownloader();
+    const metadata = await fileDownloader.downloadToPath({
+      platform: "googledrive",
+      fileId,
+      outputPath: tempPath
+    });
     
-    const { filename, mimeType } = result;
+    const { filename, mimeType } = metadata;
 
     await transcribeAudioFile({
       fileURL: `file://${tempPath}`,
-      fileType: mimeType,
+      fileType: mimeType || "",
       duration: 0,
       channelId: options.channelId,
       timestamp: options.timestamp,

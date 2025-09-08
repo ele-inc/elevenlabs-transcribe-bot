@@ -11,7 +11,6 @@ import {
 import {
   sendSlackMessage,
   uploadTranscriptToSlack,
-  downloadSlackFileToPath,
 } from "./slack.ts";
 import {
   sendDiscordMessage,
@@ -19,6 +18,7 @@ import {
 } from "./discord.ts";
 import { transcribeCore } from "./transcribe-core.ts";
 import { TempFileManager } from "./temp-file-manager.ts";
+import { FileDownloader } from "./services/file-downloader.ts";
 
 
 export async function transcribeAudioFile({
@@ -64,12 +64,17 @@ export async function transcribeAudioFile({
       tempFilePath = tempPath;
       console.log("Using Google Drive temp file:", tempFilePath);
     } else {
-      // Download from Slack
+      // Download from Slack using unified downloader
       const fileExtension = getFileExtensionFromMime(fileType);
       tempFilePath = await tempManager.createTempFile("audio", fileExtension);
 
       console.log("downloading file to temp path:", tempFilePath);
-      await downloadSlackFileToPath(fileURL, tempFilePath);
+      const fileDownloader = new FileDownloader();
+      await fileDownloader.downloadToPath({
+        platform: "slack",
+        url: fileURL,
+        outputPath: tempFilePath
+      });
     }
 
     // Check if the file is a video and convert to MP3 if needed
