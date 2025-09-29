@@ -4,6 +4,7 @@ import "https://deno.land/std@0.224.0/dotenv/load.ts";
 import { transcribeFile } from "./core/transcribe-core.ts";
 import { TranscriptionOptions } from "./core/types.ts";
 import { createTranscriptionHeader } from "./utils/utils.ts";
+import { cloudServiceManager } from "./services/cloud-service-manager.ts";
 
 interface CliOptions extends TranscriptionOptions {
   output?: string;
@@ -90,7 +91,7 @@ ElevenLabs Transcription CLI
 Usage: deno run --allow-all src/cli.ts [options] <file>
 
 Arguments:
-  <file>                Path to audio or video file to transcribe
+  <file>                Path to audio/video file to transcribe, or Dropbox URL
 
 Options:
   -h, --help           Show this help message
@@ -119,6 +120,9 @@ Examples:
   # Disable speaker diarization
   deno run --allow-all src/cli.ts --no-diarize recording.wav
 
+  # Transcribe from Dropbox URL
+  deno run --allow-all src/cli.ts "https://www.dropbox.com/s/..." --speaker-names "Alice,Bob"
+
 Note: Video files (mp4, mkv, mov, etc.) will be automatically converted to audio before transcription.
 `);
 }
@@ -130,12 +134,39 @@ async function main() {
   try {
     const { filePath, options } = parseArgs();
 
-    // Check if file exists
-    try {
-      await Deno.stat(filePath);
-    } catch {
-      console.error(`Error: File not found: ${filePath}`);
-      Deno.exit(1);
+    let actualFilePath = filePath;
+    let tempFilePath: string | undefined;
+    let filename = filePath;
+
+    // Check if input is a URL (specifically a supported cloud URL)
+    if (cloudServiceManager.isSupportedUrl(filePath)) {
+      console.log(`Detected supported cloud URL: ${filePath}`);
+      console.log("Downloading file...");
+
+      const downloadResult = await cloudServiceManager.downloadFromUrl(filePath);
+
+      if (!downloadResult.success) {
+        console.error(`Error downloading file: ${downloadResult.error}`);
+        Deno.exit(1);
+      }
+
+      if (!downloadResult.tempPath || !downloadResult.metadata) {
+        console.error("Error: Download succeeded but no file path or metadata returned");
+        Deno.exit(1);
+      }
+
+      actualFilePath = downloadResult.tempPath;
+      tempFilePath = downloadResult.tempPath;
+      filename = downloadResult.metadata.filename;
+      console.log(`File downloaded successfully: ${filename}`);
+    } else {
+      // Check if local file exists
+      try {
+        await Deno.stat(filePath);
+      } catch {
+        console.error(`Error: File not found: ${filePath}`);
+        Deno.exit(1);
+      }
     }
 
     // Check if API key is loaded
@@ -146,7 +177,7 @@ async function main() {
       Deno.exit(1);
     }
 
-    console.log(`Transcribing: ${filePath}`);
+    console.log(`Transcribing: ${filename}`);
     console.log("Options:", {
       diarize: options.diarize,
       numSpeakers: options.numSpeakers,
@@ -157,7 +188,7 @@ async function main() {
     });
 
     // Perform transcription
-    const result = await transcribeFile(filePath, options);
+    const result = await transcribeFile(actualFilePath, options);
 
     if (!result.transcript) {
       console.error("Error: No transcript was generated");
@@ -165,8 +196,8 @@ async function main() {
     }
 
     // Add filename header to transcript
-    const filename = filePath.split("/").pop() || filePath;
-    const finalTranscript = createTranscriptionHeader(filename) + result.transcript;
+    const baseFilename = filename.split("/").pop() || filename;
+    const finalTranscript = createTranscriptionHeader(baseFilename) + result.transcript;
 
     // Determine output path
     let outputPath = options.output;
@@ -183,15 +214,15 @@ async function main() {
       
       // Generate timestamp for filename
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
-      const baseFilename = filename.replace(/\.[^/.]+$/, ""); // Remove extension
+      const cleanedFilename = baseFilename.replace(/\.[^/.]+$/, ""); // Remove extension
       const extension = options.format === "json" ? "json" : "txt";
-      outputPath = `${transcriptsDir}/${baseFilename}_${timestamp}.${extension}`;
+      outputPath = `${transcriptsDir}/${cleanedFilename}_${timestamp}.${extension}`;
     }
 
     // Output result
     if (options.format === "json") {
       const jsonOutput = {
-        file: filename,
+        file: baseFilename,
         transcript: finalTranscript,
         languageCode: result.languageCode,
         ...(result.words ? { words: result.words } : {}),
@@ -216,11 +247,31 @@ async function main() {
     }
 
     console.log("\nTranscription completed successfully!");
+
+    // Clean up temporary files if they were downloaded
+    if (tempFilePath) {
+      console.log("Cleaning up temporary files...");
+      try {
+        await cloudServiceManager.cleanup();
+      } catch (cleanupError) {
+        console.warn("Warning: Failed to clean up temporary files:", cleanupError);
+      }
+    }
   } catch (error) {
     console.error("Error during transcription:", error instanceof Error ? error.message : error);
     if (error instanceof Error && error.stack) {
       console.error("Stack trace:", error.stack);
     }
+
+    // Clean up temporary files even on error
+    if (tempFilePath) {
+      try {
+        await cloudServiceManager.cleanup();
+      } catch (cleanupError) {
+        console.warn("Warning: Failed to clean up temporary files:", cleanupError);
+      }
+    }
+
     Deno.exit(1);
   }
 }

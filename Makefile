@@ -47,19 +47,24 @@ logs:
 
 # Local transcription
 transcribe:
-	@if [ -z "$(FILE)" ]; then \
-		echo "Error: FILE parameter is required"; \
-		echo "Usage: make transcribe FILE=path/to/audio.mp3 [ARGS='--option value']"; \
+	@if [ -z "$(PATH)" ]; then \
+		echo "Error: PATH parameter is required"; \
+		echo "Usage: make transcribe PATH=<file-or-url> [ARGS='--option value']"; \
 		echo ""; \
 		echo "Examples:"; \
-		echo "  make transcribe FILE=audio.mp3"; \
-		echo "  make transcribe FILE=video.mp4 ARGS='--output transcript.txt'"; \
-		echo "  make transcribe FILE=meeting.m4a ARGS='--speaker-names \"Alice,Bob\"'"; \
-		echo "  make transcribe FILE=audio.wav ARGS='--no-diarize --format json'"; \
+		echo "  make transcribe PATH=audio.mp3"; \
+		echo "  make transcribe PATH=video.mp4 ARGS='--output transcript.txt'"; \
+		echo "  make transcribe PATH=meeting.m4a ARGS='--speaker-names \"Alice,Bob\"'"; \
+		echo "  make transcribe PATH=audio.wav ARGS='--no-diarize --format json'"; \
+		echo "  make transcribe PATH='https://www.dropbox.com/...' ARGS='--speaker-names \"Alice,Bob\"'"; \
 		exit 1; \
 	fi
-	@echo "🎙️ Transcribing file: $(FILE)"
-	@deno run --allow-all src/cli.ts $(FILE) $(ARGS)
+	@if echo "$(PATH)" | grep -q '^https\?://'; then \
+		echo "🌐 Transcribing from URL: $(PATH)"; \
+	else \
+		echo "🎙️ Transcribing file: $(PATH)"; \
+	fi
+	@deno run --allow-all src/cli.ts "$(PATH)" $(ARGS)
 
 # Replace speaker labels in transcript
 replace-speakers:
@@ -87,8 +92,8 @@ help:
 	@echo "  make status          - Show Cloud Run deployment status"
 	@echo "  make env             - Show current environment variables"
 	@echo "  make logs            - Show recent Cloud Run logs"
-	@echo "  make transcribe      - Transcribe audio/video files locally"
-	@echo "                        Usage: make transcribe FILE=path/to/file [ARGS='options']"
+	@echo "  make transcribe      - Transcribe audio/video files locally or from URL"
+	@echo "                        Usage: make transcribe PATH=<file-or-url> [ARGS='options']"
 	@echo "  make replace-speakers - Replace speaker labels with names using AI"
 	@echo "                        Usage: make replace-speakers FILE=transcript.txt SPEAKERS='Name1,Name2'"
 	@echo "  make help            - Show this help message"
