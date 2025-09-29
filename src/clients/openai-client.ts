@@ -15,21 +15,27 @@ export function getOpenAIClient(): OpenAI {
 
 export async function identifySpeakers(
   transcript: string,
-  speakerNames: string[]
+  speakerNames: string[],
 ): Promise<Map<string, string>> {
   const client = getOpenAIClient();
 
   // Detect all unique speaker labels present in the transcript
   const detectedLabels = extractSpeakerLabels(transcript);
-  const labelsToMap = detectedLabels.length > 0 ? detectedLabels : ["speaker_0", "speaker_1"]; // fallback
+  const labelsToMap = detectedLabels.length > 0
+    ? detectedLabels
+    : ["speaker_0", "speaker_1"]; // fallback
 
   const speakerListString = speakerNames.join(", ");
   const labelsListString = labelsToMap.join(", ");
 
   const exampleJson = `{
-${labelsToMap.map((l) => `  "${l}": "（ここに候補リストから選んだ名前）"`).join(",\n")}\n}`;
+${
+    labelsToMap.map((l) => `  "${l}": "（ここに候補リストから選んだ名前）"`)
+      .join(",\n")
+  }\n}`;
 
-  const prompt = `以下の文字起こし結果と話者候補リストを分析し、各話者ラベルが誰なのかを特定してください。
+  const prompt =
+    `以下の文字起こし結果と話者候補リストを分析し、各話者ラベルが誰なのかを特定してください。
 
 # 話者候補リスト
 ${speakerNames.map((name) => `- ${name}`).join("\n")}
@@ -75,7 +81,10 @@ ${exampleJson}
 
     // Normalize and filter only expected labels; if missing, skip it
     const mapping: [string, string][] = labelsToMap
-      .filter((label) => typeof rawMapping[label] === "string" && rawMapping[label].trim().length > 0)
+      .filter((label) =>
+        typeof rawMapping[label] === "string" &&
+        rawMapping[label].trim().length > 0
+      )
       .map((label) => [label, rawMapping[label].trim()]);
 
     return new Map(mapping);
@@ -87,7 +96,7 @@ ${exampleJson}
 
 export function replaceSpeakerLabels(
   transcript: string,
-  speakerMapping: Map<string, string>
+  speakerMapping: Map<string, string>,
 ): string {
   let result = transcript;
 
@@ -97,7 +106,7 @@ export function replaceSpeakerLabels(
 
   for (const [speakerLabel, name] of sortedEntries) {
     // Replace all occurrences of the speaker label with the name
-    const regex = new RegExp(`\\b${escapeRegExp(speakerLabel)}\\b`, 'g');
+    const regex = new RegExp(`\\b${escapeRegExp(speakerLabel)}\\b`, "g");
     result = result.replace(regex, name);
   }
 
@@ -111,7 +120,8 @@ function extractSpeakerLabels(transcript: string): string[] {
   //  - "speaker_0: text"
   //  - "1:23 speaker_1: text"
   //  - "01:02:03 unknown_speaker: text"
-  const pattern = /(?:^|\n)\s*(?:\d{1,2}:\d{2}(?::\d{2})?\s+)?([A-Za-z][\w-]*)\s*:/g;
+  const pattern =
+    /(?:^|\n)\s*(?:\d{1,2}:\d{2}(?::\d{2})?\s+)?([A-Za-z][\w-]*)\s*:/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(transcript)) !== null) {
     labels.add(match[1]);
