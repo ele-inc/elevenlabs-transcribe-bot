@@ -79,9 +79,8 @@ export async function uploadTranscriptToSlack(
     }]),
   );
   formData2.append("channel_id", channelId);
-  if (message) {
-    formData2.append("initial_comment", message);
-  }
+  // Don't include initial_comment to avoid message ordering issues
+  // Message will be sent separately after file upload
   formData2.append("thread_ts", timestamp);
 
   const completeResponse = await fetch(
@@ -101,6 +100,11 @@ export async function uploadTranscriptToSlack(
   }
 
   console.log("Transcript successfully uploaded to Slack");
+
+  // Send completion message separately after file upload to ensure correct ordering
+  if (message) {
+    await sendSlackMessage(channelId, message, timestamp);
+  }
 }
 
 export async function downloadSlackFile(fileURL: string): Promise<ArrayBuffer> {
