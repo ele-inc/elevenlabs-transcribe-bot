@@ -62,11 +62,6 @@ export async function processCloudFile(
       return { success: false, error: "Failed to get file metadata" };
     }
 
-    console.log("[File Processor Debug] Calling transcribeAudioFile with:");
-    console.log("  - filename:", result.metadata.filename);
-    console.log("  - mimeType:", result.metadata.mimeType);
-    console.log("  - tempPath:", result.tempPath);
-
     await transcribeAudioFile({
       fileURL: `file://${result.tempPath}`,
       fileType: result.metadata.mimeType,

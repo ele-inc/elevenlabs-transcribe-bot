@@ -77,13 +77,11 @@ export async function transcribeAudioFile({
 
   console.log("fileURL", fileURL, "scribe called");
   console.log("fileType (MIME):", fileType);
-  console.log("[Scribe Debug] isGoogleDrive (actually cloud file):", isGoogleDrive);
-  console.log("[Scribe Debug] filename:", filename);
 
   try {
     // Handle Google Drive files vs Slack files
     if (isGoogleDrive && tempPath) {
-      // File is already downloaded from Google Drive
+      // File is already downloaded from cloud service
       tempFilePath = tempPath;
       console.log("Using cloud file temp path:", tempFilePath);
     } else {
@@ -96,9 +94,6 @@ export async function transcribeAudioFile({
     }
 
     // Check if the file is a video and convert to MP3 if needed
-    console.log("[Scribe Debug] Checking if video file. MIME type:", fileType);
-    console.log("[Scribe Debug] isVideoFile result:", isVideoFile(fileType));
-
     if (isVideoFile(fileType)) {
       console.log("Detected video file, converting to MP3...");
       originalVideoPath = tempFilePath;
