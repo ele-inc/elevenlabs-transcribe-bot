@@ -71,33 +71,82 @@ function parseFilenameFromContentDisposition(contentDisposition: string | null):
   return undefined;
 }
 
-async function headOrRangeFetch(url: string): Promise<Response> {
-  // Try HEAD first
-  try {
-    const headResp = await fetch(url, { method: "HEAD", redirect: "follow" });
-    if (headResp.ok) return headResp;
-  } catch {
-    // fallthrough
+async function headOrRangeFetch(url: string): Promise<{ resp: Response; originalFilename?: string }> {
+  // For Dropbox scl/fi links, we need to handle redirects manually to preserve filename
+  const isScl = url.includes("/scl/fi/");
+
+  // First, get the filename from the initial redirect response
+  let originalFilename: string | undefined;
+
+  if (isScl) {
+    console.log("[Dropbox Debug] SCL link detected, fetching redirect to get filename");
+    try {
+      // Don't follow redirects to capture the original content-disposition
+      const initialResp = await fetch(url, {
+        method: "HEAD",
+        redirect: "manual"  // Don't follow redirect
+      });
+
+      const disposition = initialResp.headers.get("content-disposition");
+      console.log("[Dropbox Debug] Initial response disposition:", disposition);
+
+      if (disposition) {
+        originalFilename = parseFilenameFromContentDisposition(disposition) || undefined;
+        console.log("[Dropbox Debug] Extracted filename from redirect:", originalFilename);
+      }
+    } catch (e) {
+      console.log("[Dropbox Debug] Failed to get initial response:", e);
+    }
   }
-  // Fallback to range GET to minimize data
+
+  // Now proceed with the actual request
+  if (!isScl) {
+    // Try HEAD first for non-scl links
+    try {
+      const headResp = await fetch(url, { method: "HEAD", redirect: "follow" });
+      console.log("[Dropbox Debug] HEAD request status:", headResp.status);
+      if (headResp.ok) {
+        const ct = headResp.headers.get("content-type");
+        // Don't trust HEAD if it returns JSON
+        if (!ct?.includes("json")) {
+          return { resp: headResp, originalFilename };
+        }
+        console.log("[Dropbox Debug] HEAD returned JSON, falling back to Range GET");
+      }
+    } catch (e) {
+      console.log("[Dropbox Debug] HEAD request failed:", e);
+    }
+  }
+
+  // Use range GET to get actual content-type
   const getResp = await fetch(url, {
     method: "GET",
-    headers: { Range: "bytes=0-0" },
+    headers: { Range: "bytes=0-100" },  // Get first 100 bytes to check content
     redirect: "follow",
   });
-  return getResp;
+  console.log("[Dropbox Debug] Range GET status:", getResp.status);
+
+  const contentType = getResp.headers.get("content-type");
+  console.log("[Dropbox Debug] Range GET Content-Type:", contentType);
+
+  return { resp: getResp, originalFilename };
 }
 
 export async function getDropboxFileMetadata(directUrl: string): Promise<DropboxMetadata> {
-  const resp = await headOrRangeFetch(directUrl);
+  console.log("[Dropbox Debug] Getting metadata for URL:", directUrl);
+  const { resp, originalFilename } = await headOrRangeFetch(directUrl);
   if (!resp.ok) {
     throw new Error(`Failed to access Dropbox link (status ${resp.status})`);
   }
-  const contentType = resp.headers.get("content-type") || "application/octet-stream";
+  let contentType = resp.headers.get("content-type") || "application/octet-stream";
   const contentLength = resp.headers.get("content-length");
   const contentDisposition = resp.headers.get("content-disposition");
 
-  let name = parseFilenameFromContentDisposition(contentDisposition);
+  console.log("[Dropbox Debug] Original Content-Type from Dropbox:", contentType);
+  console.log("[Dropbox Debug] Content-Disposition:", contentDisposition);
+
+  // Try to get filename from multiple sources
+  let name = originalFilename || parseFilenameFromContentDisposition(contentDisposition);
   if (!name) {
     try {
       const urlObj = new URL(directUrl);
@@ -108,6 +157,40 @@ export async function getDropboxFileMetadata(directUrl: string): Promise<Dropbox
       name = "dropbox_file";
     }
   }
+
+  console.log("[Dropbox Debug] Detected filename:", name);
+
+  // If content-type is unreliable, try to determine from file extension
+  // Dropbox sometimes returns JSON for errors or binary/octet-stream for media files
+  const unreliableTypes = [
+    "application/octet-stream",
+    "application/json",
+    "application/binary",
+    "binary/octet-stream",
+    "application/x-binary"
+  ];
+
+  if (unreliableTypes.includes(contentType) && name) {
+    const ext = name.toLowerCase().split('.').pop();
+    console.log("[Dropbox Debug] Unreliable MIME type detected, checking file extension:", ext);
+
+    if (ext) {
+      // Common video extensions
+      if (['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'm4v'].includes(ext)) {
+        const originalType = contentType;
+        contentType = `video/${ext === 'mov' ? 'quicktime' : ext}`;
+        console.log(`[Dropbox Debug] Detected video file. Changed MIME type from '${originalType}' to '${contentType}'`);
+      }
+      // Common audio extensions
+      else if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'wma'].includes(ext)) {
+        const originalType = contentType;
+        contentType = `audio/${ext === 'mp3' ? 'mpeg' : ext}`;
+        console.log(`[Dropbox Debug] Detected audio file. Changed MIME type from '${originalType}' to '${contentType}'`);
+      }
+    }
+  }
+
+  console.log("[Dropbox Debug] Final MIME type to be used:", contentType);
 
   return {
     name,
@@ -127,6 +210,10 @@ export async function downloadDropboxFileToPath(directUrl: string, tempPath: str
   }
   const contentType = (resp.headers.get("content-type") || "").toLowerCase();
   const disposition = resp.headers.get("content-disposition") || "";
+
+  console.log("[Dropbox Download Debug] Content-Type during download:", contentType);
+  console.log("[Dropbox Download Debug] Content-Disposition during download:", disposition);
+
   const isMedia =
     contentType.startsWith("audio/") ||
     contentType.startsWith("video/") ||
@@ -137,8 +224,11 @@ export async function downloadDropboxFileToPath(directUrl: string, tempPath: str
     contentType === "application/x-binary" ||
     /attachment/i.test(disposition);
 
+  console.log("[Dropbox Download Debug] isMedia:", isMedia);
+
   if (!isMedia) {
     // Skip non-media files silently
+    console.log("[Dropbox Download Debug] Skipping non-media file");
     return false;
   }
 
@@ -160,7 +250,9 @@ export async function downloadDropboxFileToPath(directUrl: string, tempPath: str
     await writer.close();
     return true;
   } finally {
-    try { file.close(); } catch {}
+    try { file.close(); } catch {
+      // File might already be closed
+    }
   }
 }
 
