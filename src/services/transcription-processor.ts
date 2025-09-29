@@ -53,6 +53,12 @@ export class TranscriptionProcessor {
    */
   async processCloudUrl(url: string, options: TranscriptionOptions): Promise<void> {
     try {
+      // Send "received" message immediately before processing
+      // We'll update with filename once we get metadata
+      await this.adapter.sendStatusMessage(
+        "ファイルを取得中..."
+      );
+
       const result = await processCloudFile(url, {
         channelId: this.context.channelId,
         timestamp: this.context.timestamp,
@@ -70,6 +76,7 @@ export class TranscriptionProcessor {
       }
 
       if (result.filename) {
+        // Update with actual filename
         await this.adapter.sendStatusMessage(
           this.adapter.formatProcessingMessage(result.filename, options)
         );

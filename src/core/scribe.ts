@@ -81,9 +81,9 @@ export async function transcribeAudioFile({
   try {
     // Handle Google Drive files vs Slack files
     if (isGoogleDrive && tempPath) {
-      // File is already downloaded from Google Drive
+      // File is already downloaded from cloud service
       tempFilePath = tempPath;
-      console.log("Using Google Drive temp file:", tempFilePath);
+      console.log("Using cloud file temp path:", tempFilePath);
     } else {
       // Download from Slack
       const fileExtension = getFileExtensionFromMime(fileType);

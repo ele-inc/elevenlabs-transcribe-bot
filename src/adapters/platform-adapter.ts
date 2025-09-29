@@ -2,6 +2,7 @@ import { TranscriptionOptions } from "../core/types.ts";
 import { formatOptionsText } from "../services/file-processor.ts";
 import { sendSlackMessage } from "../clients/slack.ts";
 import { editInteractionReply } from "../clients/discord.ts";
+// @ts-ignore: Types are provided in the deployment environment
 import { APIInteraction } from "npm:discord-api-types@0.37.100/v10";
 
 export interface PlatformAdapter {
@@ -49,7 +50,7 @@ export class SlackAdapter implements PlatformAdapter {
   async sendUsageMessage(): Promise<void> {
     const usageMessage = `📝 *使い方*\n\n` +
       `音声または動画ファイルをアップロードしてメンションするか、\n` +
-      `Google Driveのリンクを含めてメンションしてください。\n\n` +
+      `Google DriveやDropboxのリンクを含めてメンションしてください。\n\n` +
       `*オプション:*\n` +
       `• \`--no-diarize\`: 話者識別を無効化\n` +
       `• \`--no-timestamp\`: タイムスタンプを非表示\n` +
@@ -94,7 +95,7 @@ export class DiscordAdapter implements PlatformAdapter {
 
   async sendUsageMessage(): Promise<void> {
     const usageMessage = `**🎙️概要**
-音声・動画ファイルやGoogle DriveのURLから文字起こしを行います。
+音声・動画ファイルやGoogle DriveやDropboxのURLから文字起こしを行います。
 チャット欄に/transcribeと入力で使用開始。
 
 **⚙️オプション**

@@ -6,6 +6,7 @@
 import { CloudService, CloudDownloadResult, cloudServiceRegistry } from "./cloud-service.ts";
 import { GoogleDriveAdapter } from "../adapters/google-drive-adapter.ts";
 import { TempFileManager } from "./temp-file-manager.ts";
+import { DropboxAdapter } from "../adapters/dropbox-adapter.ts";
 
 export class CloudServiceManager {
   private tempManager = new TempFileManager();
@@ -23,7 +24,7 @@ export class CloudServiceManager {
     cloudServiceRegistry.register(new GoogleDriveAdapter());
 
     // Future services can be registered here:
-    // cloudServiceRegistry.register(new DropboxService());
+    cloudServiceRegistry.register(new DropboxAdapter());
     // cloudServiceRegistry.register(new OneDriveService());
     // cloudServiceRegistry.register(new BoxService());
   }

@@ -1,4 +1,8 @@
 #!/usr/bin/env -S deno run --allow-net --allow-env
+// Deno global for type checking in non-Deno-aware tools
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const Deno: any;
+export {};
 
 // Discord Slash Commands登録スクリプト
 // 使用方法: deno run --allow-net --allow-env register-discord-commands.ts
@@ -25,7 +29,7 @@ const commands = [
       },
       {
         name: "url",
-        description: "Google DriveのURL",
+        description: "Google DriveやDropboxのURL",
         type: 3, // STRING type
         required: false,
       },
@@ -153,6 +157,8 @@ async function main() {
 }
 
 // 実行
-if (import.meta.main) {
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+if ((import.meta as any).main) {
   await main();
 }
