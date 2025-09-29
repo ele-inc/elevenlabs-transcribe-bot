@@ -40,11 +40,11 @@ export async function handleAppMention(event: SlackEvent) {
   const options = parseTranscriptionOptions(event.text);
   console.log("Parsed options:", options);
 
-  // Check for Google Drive URLs in the message
-  const { googleDriveUrls } = extractMediaInfo(event.text || "");
+  // Check for cloud service URLs in the message
+  const { cloudUrls } = extractMediaInfo(event.text || "");
 
-  // Check if the mention includes files or Google Drive URLs
-  if ((!event.files || event.files.length === 0) && googleDriveUrls.length === 0) {
+  // Check if the mention includes files or cloud URLs
+  if ((!event.files || event.files.length === 0) && cloudUrls.length === 0) {
     const adapter = createPlatformAdapter("slack", {
       channelId: event.channel,
       threadTimestamp: event.ts,
@@ -66,8 +66,8 @@ export async function handleAppMention(event: SlackEvent) {
     platform: "slack",
   });
 
-  // Process Google Drive URLs first
-  if (googleDriveUrls.length > 0) {
+  // Process cloud URLs first
+  if (cloudUrls.length > 0) {
     // Process asynchronously without blocking response
     processor.processTextInput(event.text || "", options)
       .catch(console.error)
@@ -83,8 +83,8 @@ export async function handleAppMention(event: SlackEvent) {
       duration: file.duration,
     }));
 
-    // If processor wasn't created for Google Drive URLs, create it now
-    if (googleDriveUrls.length === 0) {
+    // If processor wasn't created for cloud URLs, create it now
+    if (cloudUrls.length === 0) {
       const adapter = createPlatformAdapter("slack", {
         channelId: event.channel,
         threadTimestamp: event.ts,
