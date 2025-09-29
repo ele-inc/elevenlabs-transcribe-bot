@@ -215,68 +215,58 @@ speaker_1: よろしくお願いします。
 
 ## Slackでの文字起こしフロー
 
-Slackでのファイル/リンクから文字起こしが行われるまでの全体像です。内部の主要ポイント（どのファイル/関数が関与するか）も併記しています。
+非エンジニア向けの説明です。登場人物は「ユーザー」「Slack」「Bot」「ElevenLabs」「gpt-4o」です。
 
 ### 全体シーケンス (Mermaid)
 
 ```mermaid
 sequenceDiagram
-  participant U as User
+  participant U as ユーザー
   participant S as Slack
-  participant E as Cloud Run / Slack Events (POST /slack/events)
-  participant H as Slack Handler (src/handlers/slack-handler.ts)
-  participant P as TranscriptionProcessor (src/services/transcription-processor.ts)
-  participant C as Slack Client (src/clients/slack.ts)
-  participant SC as Scribe (src/core/scribe.ts)
-  participant EL as ElevenLabs Scribe API
-  participant OA as OpenAI (gpt-4o)
-  participant SF as Slack Files API
+  participant B as Bot
+  participant EL as ElevenLabs
+  participant OA as gpt-4o
 
-  U->>S: @bot + ファイル or Google Driveリンク + オプション
-  S->>E: event_callback(app_mention)
-  E->>H: handleSlackEvents() / handleAppMention()
-  H->>P: processTextInput()/processAttachments()(オプション解析済み)
+  U->>S: @bot + 音声/動画ファイル or リンク + オプション
+  S->>B: メンションを通知
+  B-->>S: 受け付けた旨を返信（任意）
 
-  alt Cloud URL（Google Driveなど）
-    P->>P: processCloudUrl() -> processCloudFile()
-    P->>SC: transcribeAudioFile(isGoogleDrive=true)
-  else Slackに直接アップされたファイル
-    P->>C: downloadSlackFileToPath(url_private)
-    C->>SF: GET file (Bearer bot token)
-    P->>SC: transcribeAudioFile()
+  alt リンクが含まれる
+    B->>S: ファイルを取得
+  else Slackにファイルが直接ある
+    B->>S: ファイルを取得
   end
 
-  SC->>EL: speechToText.convert({ diarize, num_speakers, language_code: "ja" })
-  EL-->>SC: words/timestamps/text（話者ラベル: speaker_0, speaker_1, ...）
+  B->>EL: 音声を送信（日本語、話者分離オプション など）
+  EL-->>B: 文字起こし結果（speaker_0, speaker_1 などのラベル付き）
 
-  opt diarize有効 かつ --speaker-names指定
-    SC->>OA: identifySpeakers(transcript, names)
-    OA-->>SC: {"speaker_0":"田中", "speaker_1":"山田", ...}
-    SC->>SC: replaceSpeakerLabels()
+  opt --speaker-names を指定した場合
+    B->>OA: 文字起こし + 候補名を渡して「誰が誰か」を推定
+    OA-->>B: speaker_N → 名前 の対応案
+    B->>B: ラベルを人物名に置換
   end
 
-  SC->>SF: files.getUploadURLExternal → upload → files.completeUploadExternal
-  SC-->>S: chat.postMessage（完了メッセージ）
+  B-->>S: スレッドに文字起こしを投稿（テキストファイル）
 ```
 
 ### 処理フロー (Mermaid)
 
 ```mermaid
 flowchart TD
-  A[Slack app_mention + オプション] --> B{ファイル種別}
-  B -- Cloud URL --> C[processCloudFile()]
-  B -- Slack File --> D[downloadSlackFileToPath()]
-  C --> E[transcribeCore via ElevenLabs]
+  A[ユーザーが @bot を付けて投稿<br/>音声/動画 または リンク] --> B{ファイルかリンクか}
+  B -- リンク --> C[Botがリンク先から取得]
+  B -- ファイル --> D[BotがSlackから取得]
+  C --> E[ElevenLabsで文字起こし]
   D --> E
-  E --> F{diarize有効?}
-  F -- はい --> G[wordsを話者ごとに集約 (speaker_N)]
-  F -- いいえ --> H[文のみ整形（timestampはオプション）]
-  G --> I{--speaker-names指定?}
-  I -- はい --> J[gpt-4oでspeaker_N→候補名を推定]
-  J --> K[replaceSpeakerLabels()]
+  E --> F{話者分離は有効?}
+  F -- はい --> G[発言を話者ごとにまとめる<br/>(speaker_0 など)]
+  F -- いいえ --> H[発言だけを整形]
+  G --> I{--speaker-names 指定?}
+  I -- はい --> J[gpt-4oが「誰が誰か」を推定]
+  J --> K[ラベルを人物名に置換]
   I -- いいえ --> K
   H --> K
-  K --> L[Slackスレッドにアップロード/完了メッセージ]
+  K --> L[Slackのスレッドに結果を投稿]
 ```
 
 ## 話者識別（ダイアリゼーション）の仕組みと制約
@@ -288,9 +278,8 @@ flowchart TD
 
 - **段階2: ラベル→人物名の推定（任意）**
   - `--speaker-names "田中,山田"` のように候補名を与えた場合のみ実行されます。
-  - `src/clients/openai-client.ts` の `identifySpeakers()` が、文字起こし内容（語彙、一人称、呼称、文脈）から
-    `speaker_N` と候補名の対応を **gpt-4o** に推定させ、`replaceSpeakerLabels()` で置換します。
-  - これは音響的な声紋認識ではなく、あくまでテキストベースの推論です。候補名リストにない名前は使いません。
+  - Botが文字起こし内容（語彙、一人称、呼称、文脈など）を **gpt-4o** に渡し、`speaker_N` と候補名の対応を推定します。
+  - これは音の特徴から個人を特定するものではなく、テキストだけを根拠にした推測です。候補名リストにない名前は使いません。
 
 ### 重要な注意点（正確さの限界）
 
@@ -306,10 +295,4 @@ flowchart TD
 - 固有名詞や役職で互いを呼ぶ習慣がある会議では精度が上がりやすいです。
 - 誤りが気になる場合は、`--no-diarize` で話者ラベルを無効にして内容重視にするのも有効です。
 
-### 実装の参照先
-
-- Slackイベント受付: `src/handlers/slack-handler.ts`（`handleSlackEvents`, `handleAppMention`）
-- 共通ワークフロー: `src/services/transcription-processor.ts`（`processTextInput`, `processAttachments`）
-- 文字起こし中核: `src/core/transcribe-core.ts`（ElevenLabs呼び出し、話者ラベル整形）
-- 名前置換: `src/clients/openai-client.ts`（`identifySpeakers`, `replaceSpeakerLabels`）
-- Slackアップロード: `src/clients/slack.ts`（`uploadTranscriptToSlack`, `sendSlackMessage`）
+ 
