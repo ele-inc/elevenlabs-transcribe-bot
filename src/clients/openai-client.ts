@@ -112,30 +112,24 @@ export function replaceSpeakerLabels(
   return result;
 }
 
-const SUMMARY_TRANSCRIPT_CHAR_LIMIT = 8000;
-
+// 文字数制限は設けません
 export async function summarizeTranscript(transcript: string): Promise<string> {
   const client = getOpenAIClient();
 
-  const isTruncated = transcript.length > SUMMARY_TRANSCRIPT_CHAR_LIMIT;
-  const truncatedTranscript = isTruncated
-    ? transcript.slice(0, SUMMARY_TRANSCRIPT_CHAR_LIMIT)
-    : transcript;
-
-  const prompt = `以下の文字起こしを読み、重要なポイントを3〜5個の箇条書きで日本語要約してください。
+  const prompt =
+    `以下の文字起こしを読み、重要なポイントを日本語要約してください。
 
 # 出力要件
 - 箇条書きの行頭には「・」を使用してください。
 - 具体的な数値や決定事項があれば含めてください。
 - 不明点や次のアクションがあれば明記してください。
-- 情報量が多くても、必要に応じて2段落程度に収めてください。
 
-# 文字起こし${isTruncated ? "（一部のみ抜粋）" : ""}
-${truncatedTranscript}`;
+# 文字起こし
+${transcript}`;
 
   try {
     const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
