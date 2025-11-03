@@ -87,6 +87,12 @@ DISCORD_APPLICATION_ID="your-discord-app-id"
 DISCORD_PUBLIC_KEY="your-discord-public-key"
 DISCORD_BOT_TOKEN="your-discord-bot-token"
 GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account","project_id":"..."}'  # Google service account JSON
+
+# YouTube cookies (optional, required for some videos)
+# For Cloud Run: Base64-encoded cookies file content
+YOUTUBE_COOKIES_BASE64="base64-encoded-cookies-content"
+# For local/container: Path to cookies file
+# YOUTUBE_COOKIES="/path/to/cookies.txt"
 ```
 
 ### 3. Deploy to Cloud Run
@@ -166,10 +172,12 @@ The Cloud Run URL can be found in the output of the `gcloud run deploy` command 
    - For YouTube, paste the video URL instead
 2. Mention the bot in the same message with the link
 3. (Optional) Add transcription options
-4. The bot will download from Google Drive and transcribe
+4. The bot will download from Google Drive/YouTube and transcribe
 
 Example: `@bot https://drive.google.com/file/d/xxxxx/view --num-speakers 3`
 Example: `@bot https://www.youtube.com/watch?v=xxxxxxx --no-timestamp`
+
+**Note:** Some YouTube videos may require authentication cookies to download. See the "YouTube Cookies Setup" section below.
 
 ### Discord
 
@@ -195,6 +203,128 @@ Example: `@bot https://www.youtube.com/watch?v=xxxxxxx --no-timestamp`
 
 Example: `/transcribe url:https://drive.google.com/file/d/xxxxx/view speakers:3`
 Example: `/transcribe url:https://www.youtube.com/watch?v=xxxxxxx`
+
+**Note:** Some YouTube videos may require authentication cookies to download. See the "YouTube Cookies Setup" section below.
+
+## YouTube Cookies Setup
+
+If you encounter "Sign in to confirm you're not a bot" errors when transcribing YouTube videos, you need to provide authentication cookies.
+
+### Why This Error Occurs in Cloud Run but Not Locally
+
+This error is more likely to occur in Cloud Run or other cloud environments than on your local Mac for several reasons:
+
+1. **IP Address Reputation**:
+   - **Cloud Run**: Uses shared data center IP addresses that are often flagged by YouTube's bot detection systems
+   - **Your Mac**: Uses residential/office IP addresses that YouTube trusts more as legitimate user traffic
+
+2. **Access Patterns**:
+   - **Cloud Run**: Automated requests from server environments are more suspicious
+   - **Your Mac**: Manual commands appear more like normal user behavior
+
+3. **Network Context**:
+   - Data center networks have a history of automated scraping, making them higher risk
+   - Residential networks are associated with human users
+
+**Solution**: Providing YouTube cookies helps authenticate the requests, making them appear as legitimate logged-in user access rather than anonymous bot traffic.
+
+### Getting YouTube Cookies
+
+#### Method 1: Browser Extension (Recommended)
+
+This is the easiest and most reliable method:
+
+**For Chrome/Edge:**
+
+1. Install the extension "Get cookies.txt LOCALLY" from Chrome Web Store
+2. Open YouTube (https://www.youtube.com) in your browser and **make sure you're logged in**
+3. Click on the extension icon in your toolbar
+4. Click "Export" → The extension will automatically format the cookies in Netscape format
+5. Save the file as `cookies.txt` (the extension usually does this automatically)
+6. The file will be downloaded to your Downloads folder
+
+**For Firefox:**
+
+1. Install the extension "cookies.txt" from Firefox Add-ons
+2. Open YouTube (https://www.youtube.com) and **make sure you're logged in**
+3. Click on the extension icon
+4. Click "Export" → Save as `cookies.txt`
+
+**Important**: Make sure you're **logged into YouTube** before exporting cookies, otherwise the cookies won't have authentication information.
+
+#### Method 2: Using yt-dlp Directly
+
+If you have `yt-dlp` installed locally, you can extract cookies from your browser:
+
+```bash
+# Extract cookies from Chrome (most common)
+yt-dlp --cookies-from-browser chrome --print "%(title)s" "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Extract cookies from Firefox
+yt-dlp --cookies-from-browser firefox --print "%(title)s" "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Extract cookies from Safari (macOS)
+yt-dlp --cookies-from-browser safari --print "%(title)s" "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+To save cookies to a file:
+
+```bash
+# This will use cookies from browser but you still need to export them manually
+# The browser extension method is easier for getting the actual cookies.txt file
+```
+
+**Note**: Method 2 requires that your browser is still logged into YouTube. The browser extension method (Method 1) is generally easier and more reliable.
+
+### For Cloud Run Deployment
+
+1. Export your cookies to a `cookies.txt` file (see above)
+2. Base64-encode the file content:
+   ```bash
+   base64 -i cookies.txt -o cookies_base64.txt
+   # Or on macOS:
+   base64 cookies.txt > cookies_base64.txt
+   ```
+3. Add the Base64-encoded content to your Cloud Run environment variables:
+
+   ```bash
+   gcloud run services update scribe-bot \
+     --region asia-northeast1 \
+     --set-env-vars YOUTUBE_COOKIES_BASE64="$(cat cookies_base64.txt)"
+   ```
+
+   Or add it to your `.env` file:
+
+   ```
+   YOUTUBE_COOKIES_BASE64="<paste base64 content here>"
+   ```
+
+### For Local/Container Usage
+
+If running locally or in a container with file access:
+
+1. Place the `cookies.txt` file in your project directory or container
+2. Set the environment variable:
+   ```
+   YOUTUBE_COOKIES="/path/to/cookies.txt"
+   ```
+
+**Important Notes:**
+
+- **Cookie Expiration**: YouTube cookies typically expire after several months (usually 6-8 months). When cookies expire, you'll see the same "Sign in to confirm you're not a bot" error again.
+- **Cookie Refresh**: To refresh expired cookies:
+  1. Re-export cookies from your browser (following the steps in "Getting YouTube Cookies" above)
+  2. Base64-encode the new cookies file
+  3. Update the `YOUTUBE_COOKIES_BASE64` environment variable in Cloud Run:
+     ```bash
+     gcloud run services update scribe-bot \
+       --region asia-northeast1 \
+       --update-env-vars YOUTUBE_COOKIES_BASE64="$(cat cookies_base64.txt)"
+     ```
+  4. Or update your `.env` file and redeploy
+- **Monitoring**: If you start seeing authentication errors again after working fine, it's likely that the cookies have expired.
+- **Security**: Keep your cookies file secure and never commit it to version control
+- **Compliance**: Using cookies must comply with YouTube's Terms of Service
 
 ### Supported File Formats
 

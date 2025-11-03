@@ -1,5 +1,9 @@
-#!make
+# Load environment variables from .env file
+# Save current PATH before including .env
+_STD_PATH := /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 include .env
+# Export all variables and ensure PATH includes standard locations
+export PATH := $(_STD_PATH):$(or $(PATH),)
 export
 
 # Cloud Run deployment
@@ -47,24 +51,26 @@ logs:
 
 # Local transcription
 transcribe:
-	@if [ -z "$(PATH)" ]; then \
-		echo "Error: PATH parameter is required"; \
-		echo "Usage: make transcribe PATH=<file-or-url> [ARGS='--option value']"; \
+	@if [ -z "$(FILE)" ]; then \
+		echo "Error: FILE parameter is required"; \
+		echo "Usage: make transcribe FILE=<file-or-url> [ARGS='--option value']"; \
 		echo ""; \
 		echo "Examples:"; \
-		echo "  make transcribe PATH=audio.mp3"; \
-		echo "  make transcribe PATH=video.mp4 ARGS='--output transcript.txt'"; \
-		echo "  make transcribe PATH=meeting.m4a ARGS='--speaker-names \"Alice,Bob\"'"; \
-		echo "  make transcribe PATH=audio.wav ARGS='--no-diarize --format json'"; \
-		echo "  make transcribe PATH='https://www.dropbox.com/...' ARGS='--speaker-names \"Alice,Bob\"'"; \
+		echo "  make transcribe FILE=audio.mp3"; \
+		echo "  make transcribe FILE=video.mp4 ARGS='--output transcript.txt'"; \
+		echo "  make transcribe FILE=meeting.m4a ARGS='--speaker-names \"Alice,Bob\"'"; \
+		echo "  make transcribe FILE=audio.wav ARGS='--no-diarize --format json'"; \
+		echo "  make transcribe FILE='https://www.dropbox.com/...' ARGS='--speaker-names \"Alice,Bob\"'"; \
 		exit 1; \
 	fi
-	@if echo "$(PATH)" | grep -q '^https\?://'; then \
-		echo "🌐 Transcribing from URL: $(PATH)"; \
+	@export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$$PATH" && \
+	if echo "$(FILE)" | grep -q '^https\?://'; then \
+		echo "🌐 Transcribing from URL: $(FILE)"; \
 	else \
-		echo "🎙️ Transcribing file: $(PATH)"; \
+		echo "🎙️ Transcribing file: $(FILE)"; \
 	fi
-	@deno run --allow-all src/cli.ts "$(PATH)" $(ARGS)
+	@export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$$PATH" && \
+	deno run --allow-all src/cli.ts "$(FILE)" $(ARGS)
 
 # Replace speaker labels in transcript
 replace-speakers:
@@ -93,7 +99,7 @@ help:
 	@echo "  make env             - Show current environment variables"
 	@echo "  make logs            - Show recent Cloud Run logs"
 	@echo "  make transcribe      - Transcribe audio/video files locally or from URL"
-	@echo "                        Usage: make transcribe PATH=<file-or-url> [ARGS='options']"
+	@echo "                        Usage: make transcribe FILE=<file-or-url> [ARGS='options']"
 	@echo "  make replace-speakers - Replace speaker labels with names using AI"
 	@echo "                        Usage: make replace-speakers FILE=transcript.txt SPEAKERS='Name1,Name2'"
 	@echo "  make help            - Show this help message"
