@@ -37,10 +37,10 @@ export function getUsageMessage(): string {
 • \`--no-summarize\`: 要約スキップ
 
 **使用例**
-• \`--num-speakers 3\`
-• \`--speaker-names 田中,山田 --no-timestamp\`
-• \`https://www.youtube.com/watch?v=xxxxx\`
-• \`https://utage-system.com/video/xxxxx\``;
+• [ファイル添付]
+• [ファイル添付] \`--num-speakers 3\`
+• [URL] \`https://www.youtube.com/watch?v=xxxxx\`
+• [URL + オプション] \`https://utage-system.com/video/xxxxx --speaker-names 田中,山田\``;
 }
 
 /**
