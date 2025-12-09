@@ -1,7 +1,14 @@
-import { TranscriptionOptions, WordItem, Sentence, SpeakerUtterance } from "../core/types.ts";
+import {
+  Sentence,
+  SpeakerUtterance,
+  TranscriptionOptions,
+  WordItem,
+} from "../core/types.ts";
 import { isGoogleDriveUrl } from "../clients/googledrive.ts";
 
-export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptions => {
+export const parseTranscriptionOptions = (
+  text: string = "",
+): TranscriptionOptions => {
   const diarize = !text.includes("--no-diarize");
 
   // Parse num-speakers from command, or use default of 2 when diarize is enabled
@@ -18,11 +25,13 @@ export const parseTranscriptionOptions = (text: string = ""): TranscriptionOptio
 
   // Parse speaker names (supports both quoted and unquoted format)
   let speakerNames: string[] | undefined;
-  const namesMatch = text.match(/--speaker-names\s+(?:"([^"]+)"|([^-]+?)(?:\s+--|\s*$))/);
+  const namesMatch = text.match(
+    /--speaker-names\s+(?:"([^"]+)"|([^-]+?)(?:\s+--|\s*$))/,
+  );
   if (namesMatch) {
     const names = namesMatch[1] || namesMatch[2];
     // Split by both full-width and half-width comma
-    speakerNames = names.trim().split(/[,，]/).map(name => name.trim());
+    speakerNames = names.trim().split(/[,，]/).map((name) => name.trim());
   }
 
   return {
@@ -105,7 +114,7 @@ function isSentenceEndMarker(text: string): boolean {
 
 export const createTranscriptionHeader = (filename: string): string => {
   return `Original filename: ${filename}\n\n# Transcription Result\n\n`;
-}
+};
 
 export const groupBySpeaker = (words: WordItem[]): SpeakerUtterance[] => {
   const conversation: SpeakerUtterance[] = [];
@@ -149,53 +158,78 @@ export const groupBySpeaker = (words: WordItem[]): SpeakerUtterance[] => {
 export const extractGoogleDriveUrls = (text: string): string[] => {
   const urlPattern = /https?:\/\/[^\s<>]+/gi;
   const urls = text.match(urlPattern) || [];
-  return urls.filter(url => isGoogleDriveUrl(url));
+  return urls.filter((url) => isGoogleDriveUrl(url));
 };
 
 /**
- * 動画ファイルから音声(MP3)を抽出する
- * @param inputPath 入力動画ファイルのパス
+ * 動画ファイルから音声(WAV)を抽出する
+ * Cloud Run等のコンテナ環境向けに最適化済み
+ * * @param inputPath 入力動画ファイルのパス
  * @returns 変換された音声ファイルのパス
  */
 export const convertVideoToAudio = async (
-  inputPath: string
+  inputPath: string,
 ): Promise<string> => {
+  // 一時ディレクトリを作成
   const outputDir = await Deno.makeTempDir();
+
   try {
-    // 元のファイル名を保持してmp3拡張子に変更
-    const originalBaseName = inputPath.substring(inputPath.lastIndexOf('/') + 1, inputPath.lastIndexOf('.'));
-    const outputPath = `${outputDir}/${originalBaseName}.wav`;
+    // ファイル名生成（パス操作を少し堅牢に）
+    const fileName = inputPath.split(/[/\\]/).pop() ?? "audio";
+    // 拡張子(.mp4など)を除去して .wav を付与
+    const baseName = fileName.replace(/\.[^/.]+$/, "");
+    const outputPath = `${outputDir}/${baseName}.wav`;
 
     console.log(`Converting video to audio: ${inputPath} -> ${outputPath}`);
 
-    // ffmpegコマンドで動画から音声を抽出（バランス重視版）
+    // ffmpegコマンド構築
     const command = new Deno.Command("ffmpeg", {
       args: [
-        "-i", inputPath,                          // 入力
-        "-vn",                                    // 映像は無視
+        "-hide_banner", // バナー情報（ビルド構成など）を非表示
+        "-nostats", // 進捗バーを出さない（ログバッファ溢れ防止）
+        "-nostdin", // 【重要】対話入力を無効化（バックグラウンド実行でのハング防止）
+        "-y", // 上書き許可
+        "-i",
+        inputPath,
+        "-vn", // 映像無効
+        // フィルタ設定
+        "-ac",
+        "1", // モノラル
+        "-ar",
+        "16000", // 16kHz
         "-af",
-        // 最小限の前処理：低域ノイズカット → クリップ防止のみ
-        "highpass=f=60,alimiter=limit=0.95",      // limitは振幅(0〜1)。0.95 ≈ -0.45 dBFS
-        "-c:a", "pcm_s16le",                      // 非圧縮16bit PCM（WAV相当）
-        "-y", outputPath
+        "highpass=f=60,loudnorm=I=-16:TP=-1.5:LRA=11", // ノイズカット＆正規化
+        "-c:a",
+        "pcm_s16le", // 音質劣化のないWAV形式
+        outputPath,
       ],
-      stdout: "piped",
-      stderr: "piped",
+      stdout: "null", // 標準出力は捨てる（メモリ節約・安定化）
+      stderr: "piped", // エラーログだけ取得する
     });
 
-    const { success, stderr } = await command.output();
+    // コマンド実行
+    const { code, stderr } = await command.output();
 
-    if (!success) {
+    // 失敗時の処理
+    if (code !== 0) {
       const errorText = new TextDecoder().decode(stderr);
-      throw new Error(`ffmpeg failed: ${errorText}`);
+      // エラーログが長すぎる場合があるので末尾500文字程度を表示など工夫しても良い
+      throw new Error(
+        `ffmpeg process exited with code ${code}. Error: ${errorText}`,
+      );
     }
 
     console.log(`Audio extraction completed: ${outputPath}`);
     return outputPath;
   } catch (error) {
-    // Clean up temp directory on error
+    // エラー時は一時フォルダを掃除
     await Deno.remove(outputDir, { recursive: true }).catch(() => {});
-    throw new Error(`Failed to convert video to audio: ${error}`);
+    // エラーを再スロー（呼び出し元でハンドリングさせる）
+    throw new Error(
+      `Failed to convert video to audio: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 };
 
@@ -203,5 +237,5 @@ export const convertVideoToAudio = async (
  * Check if a file is a video based on MIME type
  */
 export const isVideoFile = (mimeType: string): boolean => {
-  return mimeType.startsWith('video/');
+  return mimeType.startsWith("video/");
 };

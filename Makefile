@@ -70,6 +70,7 @@ transcribe:
 		echo "🎙️ Transcribing file: $(FILE)"; \
 	fi
 	@export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$$PATH" && \
+	set -a && source .env && set +a && \
 	deno run --allow-all src/cli.ts "$(FILE)" $(ARGS)
 
 # Replace speaker labels in transcript
