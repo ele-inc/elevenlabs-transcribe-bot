@@ -162,11 +162,12 @@ export function isYouTubeUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
-    // Support YouTube and other yt-dlp compatible sites like Loom
+    // Support YouTube and other yt-dlp compatible sites like Loom, Vimeo
     return hostname.includes("youtube.com") ||
            hostname === "youtu.be" ||
            hostname.endsWith("youtube-nocookie.com") ||
-           hostname.includes("loom.com");
+           hostname.includes("loom.com") ||
+           hostname.includes("vimeo.com");
   } catch {
     return false;
   }
@@ -177,8 +178,8 @@ export function extractYouTubeVideoId(url: string): string | null {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
 
-    // For Loom and other yt-dlp sites, return the full URL
-    if (hostname.includes("loom.com")) {
+    // For Loom, Vimeo, and other yt-dlp sites, return the full URL
+    if (hostname.includes("loom.com") || hostname.includes("vimeo.com")) {
       return url;
     }
 
