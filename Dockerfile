@@ -5,18 +5,11 @@ RUN apt-get update && apt-get install -y ffmpeg yt-dlp && rm -rf /var/lib/apt/li
 
 WORKDIR /app
 
-# Copy dependency files
-COPY src/deno.json ./
-
-# Don't copy lockfile to avoid version conflicts
-# It will be regenerated inside the container
-
-# Cache dependencies
-COPY src/*.ts ./
-RUN deno cache index.ts
-
 # Copy all source files
 COPY src/ ./
+
+# Cache dependencies
+RUN deno cache index.ts
 
 # Cloud Run uses PORT env variable (default 8080)
 EXPOSE 8080
