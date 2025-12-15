@@ -33,12 +33,15 @@ export function extractUtageVideoId(url: string): string | null {
  */
 async function extractM3u8Url(videoUrl: string): Promise<string> {
   try {
+    console.log("[Utage] extractM3u8Url: fetching", videoUrl);
     const response = await fetch(videoUrl);
+    console.log("[Utage] extractM3u8Url: response status", response.status);
     if (!response.ok) {
       throw new Error(`Failed to fetch Utage page (status ${response.status})`);
     }
 
     const html = await response.text();
+    console.log("[Utage] extractM3u8Url: html length", html.length);
 
     // Extract m3u8 URL from config object in the HTML
     // Format: const config = {video_id: "...",src: "https://.../video.m3u8", ...};
@@ -63,12 +66,15 @@ async function extractM3u8Url(videoUrl: string): Promise<string> {
  */
 async function extractTitle(videoUrl: string): Promise<string> {
   try {
+    console.log("[Utage] extractTitle: fetching", videoUrl);
     const response = await fetch(videoUrl);
+    console.log("[Utage] extractTitle: response status", response.status);
     if (!response.ok) {
       return "utage_video";
     }
 
     const html = await response.text();
+    console.log("[Utage] extractTitle: html length", html.length);
 
     // Try to extract title from video element
     const titleMatch = html.match(/title="([^"]+)"/);
@@ -113,8 +119,10 @@ export async function downloadUtageAudioToPath(
   videoUrl: string,
   outputPath: string,
 ): Promise<void> {
+  console.log("[Utage] downloadUtageAudioToPath: start", videoUrl);
   // Extract m3u8 URL from the page
   const m3u8Url = await extractM3u8Url(videoUrl);
+  console.log("[Utage] downloadUtageAudioToPath: m3u8Url", m3u8Url);
 
   // Check ffmpeg availability
   let ffmpegStatus: "unknown" | "available" | "missing" = "unknown";
@@ -139,8 +147,12 @@ export async function downloadUtageAudioToPath(
   }
 
   // Download and convert using ffmpeg
+  console.log("[Utage] downloadUtageAudioToPath: starting ffmpeg with m3u8:", m3u8Url);
   const command = new Deno.Command("ffmpeg", {
     args: [
+      "-hide_banner",
+      "-nostats",
+      "-nostdin",
       "-y",
       "-i",
       m3u8Url,
@@ -150,18 +162,22 @@ export async function downloadUtageAudioToPath(
       "-b:a",
       "192k",
       "-loglevel",
-      "error",
+      "info",
       outputPath,
     ],
     stdout: "piped",
     stderr: "piped",
   });
 
-  const { success, stderr } = await command.output();
+  const { success, stdout, stderr } = await command.output();
+  const stdoutText = decoder.decode(stdout).trim();
+  const stderrText = decoder.decode(stderr).trim();
+  console.log("[Utage] downloadUtageAudioToPath: ffmpeg completed, success:", success);
+  console.log("[Utage] ffmpeg stdout:", stdoutText.slice(0, 500));
+  console.log("[Utage] ffmpeg stderr:", stderrText.slice(0, 500));
   if (!success) {
-    const errorText = decoder.decode(stderr).trim();
     throw new Error(
-      `Failed to download Utage audio: ${errorText || "Unknown error"}`,
+      `Failed to download Utage audio: ${stderrText || stdoutText || "Unknown error"}`,
     );
   }
 
