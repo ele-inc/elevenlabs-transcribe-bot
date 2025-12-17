@@ -84,17 +84,26 @@ export class CloudServiceManager {
     }
 
     try {
-      // Create temp file
-      const extension = typeof service.getPreferredFileExtension === "function"
-        ? service.getPreferredFileExtension()
-        : "tmp";
+      // Get metadata first to determine file extension
+      const metadata = await service.getFileMetadata(fileId);
+
+      // Determine extension from metadata filename or mimeType
+      let extension = "tmp";
+      if (metadata.filename) {
+        const filenameExt = metadata.filename.split('.').pop()?.toLowerCase();
+        if (filenameExt && filenameExt.length <= 5) {
+          extension = filenameExt;
+        }
+      }
+      // Fallback to service preferred extension if no valid extension found
+      if (extension === "tmp" && typeof service.getPreferredFileExtension === "function") {
+        extension = service.getPreferredFileExtension();
+      }
+
       const tempPath = await this.tempManager.createTempFile(
         service.name.toLowerCase().replace(/\s+/g, '_'),
         extension
       );
-
-      // Get metadata
-      const metadata = await service.getFileMetadata(fileId);
 
       // Download file
       const downloaded = await service.downloadFile(fileId, tempPath);
