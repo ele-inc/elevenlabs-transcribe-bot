@@ -88,6 +88,26 @@ replace-speakers:
 	@echo "   Speaker candidates: $(SPEAKERS)"
 	@scripts/replace-speakers.ts "$(FILE)" "$(SPEAKERS)" $(OUTPUT)
 
+# Docker Compose transcription (Cloud Run同等環境でテスト)
+docker-transcribe:
+	@if [ -z "$(FILE)" ]; then \
+		echo "Error: FILE parameter is required"; \
+		echo "Usage: make docker-transcribe FILE=<file-or-url> [ARGS='--option value']"; \
+		exit 1; \
+	fi
+	@docker compose build
+	@if echo "$(FILE)" | grep -q '^https\?://'; then \
+		echo "🐳 [Docker] Transcribing from URL: $(FILE)"; \
+		docker compose run --rm bot run \
+			--allow-net --allow-env --allow-read --allow-write --allow-run \
+			cli.ts "$(FILE)" $(ARGS); \
+	else \
+		echo "🐳 [Docker] Transcribing file: $(FILE)"; \
+		docker compose run --rm -v "$(shell dirname $(realpath $(FILE))):/data" bot run \
+			--allow-net --allow-env --allow-read --allow-write --allow-run \
+			cli.ts "/data/$(shell basename $(FILE))" $(ARGS); \
+	fi
+
 # Help
 help:
 	@echo "Available commands:"
@@ -99,8 +119,10 @@ help:
 	@echo "  make status          - Show Cloud Run deployment status"
 	@echo "  make env             - Show current environment variables"
 	@echo "  make logs            - Show recent Cloud Run logs"
-	@echo "  make transcribe      - Transcribe audio/video files locally or from URL"
+	@echo "  make transcribe      - Transcribe audio/video files locally (Mac環境)"
 	@echo "                        Usage: make transcribe FILE=<file-or-url> [ARGS='options']"
+	@echo "  make docker-transcribe - Transcribe in Docker (Cloud Run同等環境)"
+	@echo "                        Usage: make docker-transcribe FILE=<file-or-url> [ARGS='options']"
 	@echo "  make replace-speakers - Replace speaker labels with names using AI"
 	@echo "                        Usage: make replace-speakers FILE=transcript.txt SPEAKERS='Name1,Name2'"
 	@echo "  make help            - Show this help message"

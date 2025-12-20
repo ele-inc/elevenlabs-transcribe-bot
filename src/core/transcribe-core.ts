@@ -77,10 +77,13 @@ export async function transcribeCore(
         const speakerLabel = typeof u.speaker === "number"
           ? `speaker_${u.speaker}`
           : `${u.speaker}`;
+        // Add line breaks after sentence-ending punctuation for readability
+        // Use two trailing spaces before newline for Markdown line break compatibility
+        const formattedText = u.text.trim().replace(/([。！？.!?])\s*/g, "$1  \n");
         if (options.showTimestamp) {
-          return `${formatTimestamp(u.start)} ${speakerLabel}: ${u.text.trim()}`;
+          return `${formatTimestamp(u.start)} ${speakerLabel}: ${formattedText}`;
         } else {
-          return `${speakerLabel}: ${u.text.trim()}`;
+          return `${speakerLabel}: ${formattedText}`;
         }
       })
       .join("\n");

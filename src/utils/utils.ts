@@ -183,6 +183,8 @@ export const convertVideoToAudio = async (
     console.log(`Converting video to audio: ${inputPath} -> ${outputPath}`);
 
     // ffmpegコマンド構築
+    // Mac (AudioToolbox) と Linux (libavcodec) でデコーダが異なるため、
+    // pan+soxr を明示して環境間の変換結果を統一する
     const command = new Deno.Command("ffmpeg", {
       args: [
         "-hide_banner", // バナー情報（ビルド構成など）を非表示
@@ -191,14 +193,15 @@ export const convertVideoToAudio = async (
         "-y", // 上書き許可
         "-i",
         inputPath,
+        "-map", "0:a:0", // 最初の音声ストリームのみ
         "-vn", // 映像無効
-        // フィルタ設定
-        "-ac",
-        "1", // モノラル
+        "-sn", // 字幕無効
+        "-dn", // データストリーム無効
+        // フィルタ設定: mono化を明示 + soxrリサンプラーで環境差異を吸収
+        "-af",
+        "pan=mono|c0=0.5*c0+0.5*c1,highpass=f=60,aresample=resampler=soxr:precision=28",
         "-ar",
         "16000", // 16kHz
-        "-af",
-        "highpass=f=60", // ノイズカット（loudnorm外してテスト中）
         "-c:a",
         "pcm_s16le", // 音質劣化のないWAV形式
         outputPath,
