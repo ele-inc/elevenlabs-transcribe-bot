@@ -24,7 +24,8 @@
       "Bash(yt-dlp:*)",
       "Bash(curl:*)",
       "Bash(deno run:*)",
-      "Bash(deno eval:*)"
+      "Bash(deno eval:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []
