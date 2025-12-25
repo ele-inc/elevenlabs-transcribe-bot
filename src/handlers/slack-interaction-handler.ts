@@ -256,7 +256,7 @@ export function createTranscriptionButtonBlocks() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "*ファイルから文字起こし*\nファイルを添付して `@bot` とメンションしてください\n\n*オプション（任意）*\n• `--no-diarize` : 話者分離OFF（1人の場合に推奨）\n• `--num-speakers 3` : 話者数を指定\n• `--speaker-names 田中,山田` : 話者名を指定\n• `--no-timestamp` : タイムスタンプ非表示\n• `--no-summarize` : 要約をスキップ\n\n例: `@bot --num-speakers 3 --speaker-names 田中,山田,佐藤`",
+        text: "*ファイルから文字起こし*\nファイルを添付して `@bot` にメンションしてください\n\n*オプション（任意）*\n• `--no-diarize` : 話者分離OFF（1人の場合に推奨）\n• `--num-speakers 3` : 話者数を指定\n• `--speaker-names 田中,山田,佐藤` : 話者名を指定(話者数と揃える)\n• `--no-timestamp` : タイムスタンプ非表示\n• `--no-summarize` : 要約をスキップ\n\n例: `@bot --num-speakers 3 --speaker-names 田中,山田,佐藤`",
       },
     },
   ];
