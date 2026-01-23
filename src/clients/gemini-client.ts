@@ -15,13 +15,15 @@ function getGeminiClient(): GoogleGenerativeAI {
   return geminiClient;
 }
 
+const MODEL_NAME = "gemini-3-flash-preview";
+
 export async function identifySpeakers(
   transcript: string,
   speakerNames: string[]
 ): Promise<Map<string, string>> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({
-    model: "gemini-3-flash-preview",
+    model: MODEL_NAME,
     generationConfig: {
       responseMimeType: "application/json",
     },
@@ -126,7 +128,7 @@ function escapeRegExp(input: string): string {
 
 export async function summarizeTranscript(transcript: string): Promise<string> {
   const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: "gemini-3-flash-preview" });
+  const model = client.getGenerativeModel({ model: MODEL_NAME });
 
   const systemInstruction =
     "あなたは会議や打ち合わせの要点を簡潔にまとめる日本語アシスタントです。重要事項を漏れなく整理します。";
