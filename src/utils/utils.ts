@@ -197,9 +197,11 @@ export const convertVideoToAudio = async (
         "-vn", // 映像無効
         "-sn", // 字幕無効
         "-dn", // データストリーム無効
-        // フィルタ設定: mono化を明示 + soxrリサンプラーで環境差異を吸収
+        // フィルタ設定: mono化を明示 + swr（libswresample）でリサンプリング
+        // Note: soxrは環境によってはインストールされていないため、
+        // 全環境で利用可能なswrを使用
         "-af",
-        "pan=mono|c0=0.5*c0+0.5*c1,highpass=f=60,aresample=resampler=soxr:precision=28",
+        "pan=mono|c0=0.5*c0+0.5*c1,highpass=f=60,aresample=resampler=swr",
         "-ar",
         "16000", // 16kHz
         "-c:a",
