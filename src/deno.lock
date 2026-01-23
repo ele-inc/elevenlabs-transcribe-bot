@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@google/generative-ai@*": "0.24.1",
     "npm:discord-api-types@*": "0.38.37",
     "npm:elevenlabs@*": "1.59.0",
     "npm:google-auth-library@*": "10.5.0",
@@ -9,6 +10,9 @@
     "npm:tweetnacl@*": "1.0.3"
   },
   "npm": {
+    "@google/generative-ai@0.24.1": {
+      "integrity": "sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q=="
+    },
     "@isaacs/cliui@8.0.2": {
       "integrity": "sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==",
       "dependencies": [

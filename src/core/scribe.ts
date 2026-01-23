@@ -6,7 +6,7 @@ import {
   getFileExtensionFromMime,
   createTranscriptionHeader,
 } from "../utils/utils.ts";
-import { summarizeTranscript } from "../clients/openai-client.ts";
+import { summarizeTranscript } from "../clients/gemini-client.ts";
 import { PlatformAdapter } from "../adapters/platform-adapter.ts";
 import { transcribeFile } from "./transcribe-core.ts";
 import { TempFileManager } from "../services/temp-file-manager.ts";

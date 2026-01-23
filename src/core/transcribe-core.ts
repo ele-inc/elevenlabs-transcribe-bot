@@ -10,7 +10,7 @@ import {
   isVideoFile,
   convertVideoToAudio,
 } from "../utils/utils.ts";
-import { identifySpeakers, replaceSpeakerLabels } from "../clients/openai-client.ts";
+import { identifySpeakers, replaceSpeakerLabels } from "../clients/gemini-client.ts";
 import { config } from "./config.ts";
 
 const elevenlabs = new ElevenLabsClient({

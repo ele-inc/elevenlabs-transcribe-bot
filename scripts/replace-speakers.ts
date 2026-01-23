@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env
 
-import { identifySpeakers, replaceSpeakerLabels } from "../src/clients/openai-client.ts";
+import { identifySpeakers, replaceSpeakerLabels } from "../src/clients/gemini-client.ts";
 
 async function main() {
   const args = Deno.args;
