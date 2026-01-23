@@ -38,7 +38,7 @@ export class SlackAdapter implements PlatformAdapter {
   async sendErrorMessage(error: string): Promise<void> {
     await sendSlackMessage(
       this.channelId,
-      `❌ エラーが発生しました: ${error}`,
+      `❌ ${error}`,
       this.threadTimestamp
     );
   }
@@ -85,7 +85,7 @@ export class DiscordAdapter implements PlatformAdapter {
   async sendErrorMessage(error: string): Promise<void> {
     await editInteractionReply(
       this.interaction.token,
-      `❌ エラーが発生しました: ${error}`
+      `❌ ${error}`
     );
   }
 

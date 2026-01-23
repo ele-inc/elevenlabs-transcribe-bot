@@ -143,7 +143,7 @@ function handleTranscribeCommand(
       // Try to update the interaction with error message
       await editInteractionReply(
         interaction.token,
-        `❌ エラーが発生しました: ${getErrorMessage(error)}`
+        `❌ ${getErrorMessage(error)}`
       ).catch(console.error);
     }
   });
