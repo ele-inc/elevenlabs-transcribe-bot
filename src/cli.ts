@@ -43,22 +43,27 @@ function parseArgs(): { filePath: string; options: CliOptions } {
     summarize: !args.includes("--no-summarize"),
   };
 
-  // Parse speaker count
-  const speakerIndex = args.indexOf("--num-speakers");
-  if (speakerIndex !== -1 && args[speakerIndex + 1]) {
-    const num = parseInt(args[speakerIndex + 1], 10);
-    if (!isNaN(num) && num > 0) {
-      options.numSpeakers = num;
-    }
-  }
-
-  // Parse speaker names
+  // Parse speaker names first (takes priority for determining numSpeakers)
   const speakerNamesIndex = args.indexOf("--speaker-names");
   if (speakerNamesIndex !== -1 && args[speakerNamesIndex + 1]) {
     options.speakerNames = args[speakerNamesIndex + 1]
       .split(",")
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+  }
+
+  // Determine numSpeakers: speakerNames takes priority if provided
+  if (options.speakerNames && options.speakerNames.length > 0) {
+    options.numSpeakers = options.speakerNames.length;
+  } else {
+    // Parse speaker count only if speaker names are not provided
+    const speakerIndex = args.indexOf("--num-speakers");
+    if (speakerIndex !== -1 && args[speakerIndex + 1]) {
+      const num = parseInt(args[speakerIndex + 1], 10);
+      if (!isNaN(num) && num > 0) {
+        options.numSpeakers = num;
+      }
+    }
   }
 
   // Parse output file
@@ -104,9 +109,9 @@ Options:
 
 Transcription Options:
   --no-diarize         Disable speaker identification (default: enabled)
-  --num-speakers <n>   Number of speakers (default: auto-detect)
-  --speaker-names <names>  Comma-separated speaker names
+  --speaker-names <names>  Comma-separated speaker names (auto-sets speaker count)
                            Example: --speaker-names "Alice,Bob,Charlie"
+  --num-speakers <n>   Number of speakers (only used if --speaker-names not provided)
   --no-timestamp       Disable timestamps in output
   --no-audio-events    Disable audio event tagging
 

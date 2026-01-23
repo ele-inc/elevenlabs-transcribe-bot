@@ -11,19 +11,7 @@ export const parseTranscriptionOptions = (
 ): TranscriptionOptions => {
   const diarize = !text.includes("--no-diarize");
 
-  // Parse num-speakers from command, or use default of 2 when diarize is enabled
-  let numSpeakers: number | undefined;
-  if (diarize) {
-    const numSpeakersMatch = text.match(/--num-speakers\s+(\d+)/);
-    if (numSpeakersMatch) {
-      const parsed = parseInt(numSpeakersMatch[1], 10);
-      numSpeakers = (parsed >= 1 && parsed <= 32) ? parsed : 2;
-    } else {
-      numSpeakers = 2; // Default to 2 speakers when diarize is true
-    }
-  }
-
-  // Parse speaker names (supports both quoted and unquoted format)
+  // Parse speaker names first (supports both quoted and unquoted format)
   let speakerNames: string[] | undefined;
   const namesMatch = text.match(
     /--speaker-names\s+(?:"([^"]+)"|([^-]+?)(?:\s+--|\s*$))/,
@@ -31,7 +19,25 @@ export const parseTranscriptionOptions = (
   if (namesMatch) {
     const names = namesMatch[1] || namesMatch[2];
     // Split by both full-width and half-width comma
-    speakerNames = names.trim().split(/[,，]/).map((name) => name.trim());
+    speakerNames = names.trim().split(/[,，]/).map((name) => name.trim()).filter(Boolean);
+  }
+
+  // Determine numSpeakers: speakerNames takes priority if provided
+  let numSpeakers: number | undefined;
+  if (diarize) {
+    if (speakerNames && speakerNames.length > 0) {
+      // If speaker names are provided, use their count as numSpeakers
+      numSpeakers = speakerNames.length;
+    } else {
+      // Otherwise, parse from command or use default of 2
+      const numSpeakersMatch = text.match(/--num-speakers\s+(\d+)/);
+      if (numSpeakersMatch) {
+        const parsed = parseInt(numSpeakersMatch[1], 10);
+        numSpeakers = (parsed >= 1 && parsed <= 32) ? parsed : 2;
+      } else {
+        numSpeakers = 2; // Default to 2 speakers when diarize is true
+      }
+    }
   }
 
   return {

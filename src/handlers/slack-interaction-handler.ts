@@ -82,6 +82,28 @@ function createTranscriptionModal(
     blocks.push(
       {
         type: "input",
+        block_id: "speaker_names_block",
+        optional: true,
+        element: {
+          type: "plain_text_input",
+          action_id: "speaker_names_input",
+          placeholder: {
+            type: "plain_text",
+            text: "田中,山田,佐藤",
+          },
+          ...(currentValues?.speakerNames && { initial_value: currentValues.speakerNames }),
+        },
+        label: {
+          type: "plain_text",
+          text: "📝 話者名（カンマ区切り）",
+        },
+        hint: {
+          type: "plain_text",
+          text: "入力すると話者数は自動で設定されます",
+        },
+      },
+      {
+        type: "input",
         block_id: "num_speakers_block",
         optional: true,
         element: {
@@ -98,25 +120,7 @@ function createTranscriptionModal(
         },
         label: {
           type: "plain_text",
-          text: "🔢 話者数",
-        },
-      },
-      {
-        type: "input",
-        block_id: "speaker_names_block",
-        optional: true,
-        element: {
-          type: "plain_text_input",
-          action_id: "speaker_names_input",
-          placeholder: {
-            type: "plain_text",
-            text: "田中,山田,佐藤",
-          },
-          ...(currentValues?.speakerNames && { initial_value: currentValues.speakerNames }),
-        },
-        label: {
-          type: "plain_text",
-          text: "📝 話者名（カンマ区切り）",
+          text: "🔢 話者数（話者名未入力時のみ使用）",
         },
       }
     );
@@ -256,7 +260,7 @@ export function createTranscriptionButtonBlocks() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "*ファイルから文字起こし*\nファイルを添付して `@bot` にメンションしてください\n\n*オプション（任意）*\n• `--no-diarize` : 話者分離OFF（1人の場合に推奨）\n• `--num-speakers 3` : 話者数を指定\n• `--speaker-names 田中,山田,佐藤` : 話者名を指定(話者数と揃える)\n• `--no-timestamp` : タイムスタンプ非表示\n• `--no-summarize` : 要約をスキップ\n\n例: `@bot --num-speakers 3 --speaker-names 田中,山田,佐藤`",
+        text: "*ファイルから文字起こし*\nファイルを添付して `@bot` にメンションしてください\n\n*オプション（任意）*\n• `--no-diarize` : 話者分離OFF（1人の場合に推奨）\n• `--speaker-names 田中,山田,佐藤` : 話者名を指定（話者数は自動設定）\n• `--num-speakers 3` : 話者数のみ指定（話者名が不明な場合）\n• `--no-timestamp` : タイムスタンプ非表示\n• `--no-summarize` : 要約をスキップ\n\n例: `@bot --speaker-names 田中,山田,佐藤`",
       },
     },
   ];
@@ -301,13 +305,20 @@ function parseModalValues(values: Record<string, Record<string, { value?: string
   const tagAudioEvents = getSelectValue("audio_events_block", "audio_events_select") !== "false";
   const summarize = getSelectValue("summarize_block", "summarize_select") !== "false";
 
-  const numSpeakersStr = getSelectValue("num_speakers_block", "num_speakers_select");
-  const numSpeakers = numSpeakersStr ? parseInt(numSpeakersStr, 10) : 2;
-
+  // Parse speaker names first
   const speakerNamesStr = getInputValue("speaker_names_block", "speaker_names_input");
   const speakerNames = speakerNamesStr
     ? speakerNamesStr.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
     : undefined;
+
+  // Determine numSpeakers: speakerNames takes priority if provided
+  let numSpeakers: number;
+  if (speakerNames && speakerNames.length > 0) {
+    numSpeakers = speakerNames.length;
+  } else {
+    const numSpeakersStr = getSelectValue("num_speakers_block", "num_speakers_select");
+    numSpeakers = numSpeakersStr ? parseInt(numSpeakersStr, 10) : 2;
+  }
 
   const url = getInputValue("url_block", "url_input") || null;
 
