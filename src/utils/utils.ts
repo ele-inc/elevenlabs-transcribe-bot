@@ -19,7 +19,7 @@ export const parseTranscriptionOptions = (
   if (namesMatch) {
     const names = namesMatch[1] || namesMatch[2];
     // Split by both full-width and half-width comma
-    speakerNames = names.trim().split(/[,，]/).map((name) => name.trim()).filter(Boolean);
+    speakerNames = names.trim().split(/[,，、]/).map((name) => name.trim()).filter(Boolean);
   }
 
   // Determine numSpeakers: speakerNames takes priority if provided

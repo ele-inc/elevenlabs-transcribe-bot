@@ -308,7 +308,7 @@ function parseModalValues(values: Record<string, Record<string, { value?: string
   // Parse speaker names first
   const speakerNamesStr = getInputValue("speaker_names_block", "speaker_names_input");
   const speakerNames = speakerNamesStr
-    ? speakerNamesStr.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+    ? speakerNamesStr.split(/[,，、]/).map((s) => s.trim()).filter(Boolean)
     : undefined;
 
   // Determine numSpeakers: speakerNames takes priority if provided

@@ -47,7 +47,7 @@ function parseArgs(): { filePath: string; options: CliOptions } {
   const speakerNamesIndex = args.indexOf("--speaker-names");
   if (speakerNamesIndex !== -1 && args[speakerNamesIndex + 1]) {
     options.speakerNames = args[speakerNamesIndex + 1]
-      .split(",")
+      .split(/[,，、]/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
   }
