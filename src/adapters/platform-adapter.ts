@@ -64,7 +64,7 @@ export class SlackAdapter implements PlatformAdapter {
   }
 
   async sendSummary(summary: string): Promise<void> {
-    const summaryMessage = `📝 要約\n${summary}`;
+    const summaryMessage = `📝 要約\n\`\`\`\n${summary}\n\`\`\``;
     await sendSlackMessage(this.channelId, summaryMessage, this.threadTimestamp);
   }
 
@@ -111,7 +111,7 @@ export class DiscordAdapter implements PlatformAdapter {
 
   async sendSummary(summary: string): Promise<void> {
     const channelId = this.interaction.channel?.id || "";
-    const summaryMessage = `📝 要約\n${summary}`;
+    const summaryMessage = `📝 要約\n\`\`\`\n${summary}\n\`\`\``;
     await sendDiscordMessage(channelId, summaryMessage);
   }
 
