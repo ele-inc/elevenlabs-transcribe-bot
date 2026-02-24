@@ -163,6 +163,10 @@ export function isYouTubeUrl(url: string): boolean {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
     // Support YouTube and other yt-dlp compatible sites like Loom, Vimeo
+    // Exclude Vimeo review URLs (/reviews/{uuid}/videos/{id}) - handled by VimeoReviewAdapter
+    if (hostname.includes("vimeo.com") && /\/reviews\/[^/]+\/videos\/\d+/.test(parsed.pathname)) {
+      return false;
+    }
     return hostname.includes("youtube.com") ||
            hostname === "youtu.be" ||
            hostname.endsWith("youtube-nocookie.com") ||
