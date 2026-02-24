@@ -71,8 +71,18 @@ export function extractVimeoReviewId(url: string): string | null {
   return isVimeoReviewUrl(url) ? url : null;
 }
 
+// Cache player config to avoid fetching twice (metadata + download)
+const playerConfigCache = new Map<string, {
+  title: string;
+  duration?: number;
+  hlsUrl: string;
+  cachedAt: number;
+}>();
+
+const CONFIG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
- * Fetch the Vimeo player config JSON from a review page
+ * Fetch the Vimeo player config JSON from a review page (with caching)
  * 1. Fetch the review page HTML
  * 2. Extract the player config URL from the HTML
  * 3. Fetch the config JSON
@@ -84,6 +94,11 @@ async function fetchPlayerConfig(
   duration?: number;
   hlsUrl: string;
 }> {
+  // Return cached config if available and fresh
+  const cached = playerConfigCache.get(reviewUrl);
+  if (cached && (Date.now() - cached.cachedAt) < CONFIG_CACHE_TTL_MS) {
+    return { title: cached.title, duration: cached.duration, hlsUrl: cached.hlsUrl };
+  }
   // Step 1: Fetch the review page HTML
   const pageResponse = await fetch(reviewUrl);
   if (!pageResponse.ok) {
@@ -141,7 +156,17 @@ async function fetchPlayerConfig(
     throw new Error("Could not extract HLS URL from Vimeo player config");
   }
 
+  // Cache the result
+  playerConfigCache.set(reviewUrl, { title, duration, hlsUrl, cachedAt: Date.now() });
+
   return { title, duration, hlsUrl };
+}
+
+/**
+ * Clear cached config for a URL (called after download completes)
+ */
+function clearConfigCache(reviewUrl: string): void {
+  playerConfigCache.delete(reviewUrl);
 }
 
 /**
@@ -191,11 +216,18 @@ export async function downloadVimeoReviewAudioToPath(
     stderr: "piped",
   });
 
-  const { success, stderr } = await command.output();
+  const { success, stdout, stderr } = await command.output();
+  const stderrText = decoder.decode(stderr).trim();
+  const stdoutText = decoder.decode(stdout).trim();
+
+  // Clear cache after download attempt
+  clearConfigCache(reviewUrl);
+
   if (!success) {
-    const errorText = decoder.decode(stderr).trim();
+    console.error("[VimeoReview] ffmpeg failed:", stderrText);
+    console.error("[VimeoReview] ffmpeg stdout:", stdoutText);
     throw new Error(
-      `Failed to download Vimeo Review audio: ${errorText || "Unknown error"}`,
+      `Failed to download Vimeo Review audio: ${stderrText || "Unknown error"}`,
     );
   }
 
@@ -203,9 +235,16 @@ export async function downloadVimeoReviewAudioToPath(
   try {
     const stat = await Deno.stat(outputPath);
     if (!stat.isFile || stat.size === 0) {
+      console.error("[VimeoReview] Output file missing or empty after successful ffmpeg");
+      console.error("[VimeoReview] ffmpeg stderr:", stderrText);
       throw new Error("Output file is empty after ffmpeg conversion");
     }
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Output file is empty")) {
+      throw error;
+    }
+    console.error("[VimeoReview] stat failed for:", outputPath);
+    console.error("[VimeoReview] ffmpeg stderr:", stderrText);
     throw new Error(
       `Vimeo Review audio output verification failed: ${
         error instanceof Error ? error.message : String(error)

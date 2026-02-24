@@ -54,8 +54,10 @@ export async function processCloudFile(
     adapter: PlatformAdapter;
   }
 ): Promise<ProcessingResult> {
+  let tempPath: string | undefined;
   try {
     const result = await cloudServiceManager.downloadFromUrl(url);
+    tempPath = result.tempPath;
 
     if (!result.success) {
       return { success: false, error: result.error };
@@ -86,8 +88,18 @@ export async function processCloudFile(
       error: getErrorMessage(error)
     };
   } finally {
-    // Cleanup is handled by cloudServiceManager
-    await cloudServiceManager.cleanup();
+    // Clean up only this request's temp file, not all tracked files
+    // cloudServiceManager is a singleton, so cleanup() would delete
+    // temp files from other concurrent requests
+    if (tempPath) {
+      try {
+        await Deno.remove(tempPath).catch(() => {});
+        const dirPath = tempPath.substring(0, tempPath.lastIndexOf("/"));
+        await Deno.remove(dirPath, { recursive: true }).catch(() => {});
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
   }
 }
 
