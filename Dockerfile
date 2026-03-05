@@ -1,7 +1,9 @@
 FROM denoland/deno:latest
 
 # Install ffmpeg for video to audio conversion and yt-dlp for YouTube downloads
-RUN apt-get update && apt-get install -y ffmpeg yt-dlp && rm -rf /var/lib/apt/lists/*
+# yt-dlp from apt is outdated; install latest via pip for Loom/Vimeo compatibility
+RUN apt-get update && apt-get install -y ffmpeg python3-pip && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --break-system-packages yt-dlp
 
 WORKDIR /app
 
