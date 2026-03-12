@@ -281,6 +281,36 @@ async function main() {
       }
     }
 
+    // Copy transcript text to clipboard (macOS)
+    const clipboardContent = options.format === "json"
+      ? JSON.stringify(
+          {
+            file: baseFilename,
+            transcript: finalTranscript,
+            languageCode: result.languageCode,
+            ...(result.words ? { words: result.words } : {}),
+          },
+          null,
+          2,
+        )
+      : finalTranscript;
+
+    try {
+      const pbcopy = new Deno.Command("pbcopy", {
+        stdin: "piped",
+      });
+      const process = pbcopy.spawn();
+      const writer = process.stdin.getWriter();
+      await writer.write(new TextEncoder().encode(clipboardContent));
+      await writer.close();
+      const { success } = await process.output();
+      if (success) {
+        console.log("\n📋 Transcript copied to clipboard!");
+      }
+    } catch {
+      // pbcopy not available (non-macOS), silently skip
+    }
+
     console.log("\nTranscription completed successfully!");
 
     // Clean up temporary files if they were downloaded
