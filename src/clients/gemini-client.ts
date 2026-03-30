@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 let geminiClient: GoogleGenerativeAI | null = null;
 

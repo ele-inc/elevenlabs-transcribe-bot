@@ -39,7 +39,7 @@ export class GoogleDriveAdapter extends BaseCloudService {
   /**
    * Override to exclude Google Docs files
    */
-  isMediaFile(mimeType: string): boolean {
+  override isMediaFile(mimeType: string): boolean {
     // Check if it's a Google Docs/Sheets/Slides file (should be skipped)
     const googleDocsTypes = [
       "application/vnd.google-apps.document",

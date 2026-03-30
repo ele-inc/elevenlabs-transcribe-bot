@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-all
 
-import "https://deno.land/std@0.224.0/dotenv/load.ts";
+import "@std/dotenv/load";
 import { transcribeFile } from "./core/transcribe-core.ts";
 import { TranscriptionOptions } from "./core/types.ts";
 import { createTranscriptionHeader } from "./utils/utils.ts";

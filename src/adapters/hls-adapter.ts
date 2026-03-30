@@ -26,7 +26,7 @@ export class HlsAdapter extends BaseCloudService {
     return true;
   }
 
-  getPreferredFileExtension(): string {
+  override getPreferredFileExtension(): string {
     return "mp3";
   }
 }

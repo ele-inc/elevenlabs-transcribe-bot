@@ -4,7 +4,7 @@ import { sendSlackMessage, uploadTranscriptToSlack, downloadSlackFileToPath } fr
 import { editInteractionReply, sendDiscordMessage, uploadTranscriptToDiscord, downloadDiscordFile } from "../clients/discord.ts";
 import { getUsageMessage } from "../utils/messages.ts";
 // @ts-ignore: Types are provided in the deployment environment
-import { APIInteraction } from "npm:discord-api-types/v10";
+import { APIInteraction } from "discord-api-types/v10";
 
 export interface PlatformAdapter {
   sendStatusMessage(message: string): Promise<void>;

@@ -1,4 +1,4 @@
-import { ElevenLabsClient } from "npm:elevenlabs";
+import { ElevenLabsClient } from "elevenlabs";
 import {
   TranscriptionOptions,
   WordItem,
@@ -41,7 +41,7 @@ export async function transcribeCore(
 
   // Create blob from file data with explicit MIME type
   // After video conversion, mimeType should be audio/wav
-  const fileBlob = new Blob([fileData], { type: mimeType });
+  const fileBlob = new Blob([new Uint8Array(fileData)], { type: mimeType });
 
   // Determine filename extension based on MIME type
   const extension = mimeType === "audio/wav" ? "wav" :

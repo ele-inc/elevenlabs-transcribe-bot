@@ -2,5 +2,15 @@
   "unstable": ["kv", "temporal"],
   "compilerOptions": {
     "lib": ["dom", "deno.ns"]
+  },
+  "imports": {
+    "@std/dotenv": "jsr:@std/dotenv@^0.225.6",
+    "elevenlabs": "npm:elevenlabs@^1.59.0",
+    "discord-api-types/v10": "npm:discord-api-types@^0.38.43/v10",
+    "google-auth-library": "npm:google-auth-library@^10.6.2",
+    "googleapis": "npm:googleapis@^171.4.0",
+    "tweetnacl": "npm:tweetnacl@^1.0.3",
+    "@google/generative-ai": "npm:@google/generative-ai@^0.24.1",
+    "openai": "npm:openai@^6.33.0"
   }
 }

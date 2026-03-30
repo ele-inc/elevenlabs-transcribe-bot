@@ -9,7 +9,7 @@ import {
   APIApplicationCommandInteractionDataStringOption,
   APIApplicationCommandInteractionDataAttachmentOption,
   APIAttachment,
-} from "npm:discord-api-types/v10";
+} from "discord-api-types/v10";
 import { TranscriptionOptions } from "../core/types.ts";
 
 // EdgeRuntime removed for Cloud Run compatibility
