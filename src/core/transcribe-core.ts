@@ -59,7 +59,7 @@ export async function transcribeCore(
   // Call ElevenLabs API
   const scribeResult = await elevenlabs.speechToText.convert({
     file: file,
-    model_id: "scribe_v1",
+    model_id: "scribe_v2",
     tag_audio_events: options.tagAudioEvents,
     diarize: options.diarize,
     language_code: "ja",
