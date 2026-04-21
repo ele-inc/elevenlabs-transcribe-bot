@@ -234,7 +234,25 @@ export function createTranscriptionButtonBlocks() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "🎙️ *文字起こしボット*\n\n*URLから文字起こし*\n下のボタンから設定・実行できます",
+        text: "🎙️ *文字起こしボット*\n使い方は2通りあります。",
+      },
+    },
+    {
+      type: "divider",
+    },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "📎 方法1: URLから文字起こし",
+        emoji: true,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "YouTube / Google Drive / Vimeo などのURLを貼って実行します。\n下のボタンから設定・実行してください。",
       },
     },
     {
@@ -257,10 +275,25 @@ export function createTranscriptionButtonBlocks() {
       type: "divider",
     },
     {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "💾 方法2: ファイルから文字起こし",
+        emoji: true,
+      },
+    },
+    {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "*ファイルから文字起こし*\nファイルを添付して `@bot` にメンションしてください\n\n*オプション（任意）*\n• `--no-diarize` : 話者分離OFF（1人の場合に推奨）\n• `--speaker-names 田中,山田,佐藤` : 話者名を指定（話者数は自動設定）\n• `--num-speakers 3` : 話者数のみ指定（話者名が不明な場合）\n• `--no-timestamp` : タイムスタンプ非表示\n• `--no-summarize` : 要約をスキップ\n\n例: `@bot --speaker-names 田中,山田,佐藤`",
+        text: "音声・動画ファイルを Slack に添付し、`@bot` にメンションしてください。\n_※ ボタン操作は不要です_",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*オプション（メンション時に半角スペース区切りで指定）*\n• `--no-diarize` : 話者分離OFF（1人の場合に推奨）\n• `--speaker-names 田中,山田,佐藤` : 話者名を指定（話者数は自動設定）\n• `--num-speakers 3` : 話者数のみ指定（話者名が不明な場合）\n• `--no-timestamp` : タイムスタンプ非表示\n• `--no-summarize` : 要約をスキップ\n\n例: `@bot --speaker-names 田中,山田,佐藤`（添付ファイル付き）",
       },
     },
   ];
