@@ -26,6 +26,7 @@ interface Config {
   // YouTube (optional)
   youtubeCookies?: string; // Path to cookies file (for local/container usage)
   youtubeCookiesBase64?: string; // Base64-encoded cookies file content (for Cloud Run)
+  youtubeProxy?: string; // Proxy URL for yt-dlp (e.g. http://user:pass@host:port)
 }
 
 function getEnvOrThrow(key: string, defaultValue?: string): string {
@@ -63,6 +64,7 @@ export const config: Config = {
   // YouTube (optional)
   youtubeCookies: getOptionalEnv("YOUTUBE_COOKIES"),
   youtubeCookiesBase64: getOptionalEnv("YOUTUBE_COOKIES_BASE64"),
+  youtubeProxy: getOptionalEnv("YOUTUBE_PROXY"),
 };
 
 export default config;

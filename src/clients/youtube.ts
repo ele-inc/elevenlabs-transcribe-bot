@@ -158,6 +158,10 @@ function getCookieArgs(cookiesFilePath: string | null): string[] {
   return args;
 }
 
+function getProxyArgs(): string[] {
+  return config.youtubeProxy ? ["--proxy", config.youtubeProxy] : [];
+}
+
 export function isYouTubeUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -225,6 +229,7 @@ export async function getYouTubeFileMetadata(
   // Create cookies file if needed
   const cookiesInfo = await createCookiesFileIfNeeded();
   const cookieArgs = getCookieArgs(cookiesInfo.path);
+  const proxyArgs = getProxyArgs();
 
   try {
     const command = new Deno.Command("yt-dlp", {
@@ -233,6 +238,7 @@ export async function getYouTubeFileMetadata(
         "--skip-download",
         "--no-warnings",
         ...cookieArgs,
+        ...proxyArgs,
         url,
       ],
       stdout: "piped",
@@ -303,6 +309,7 @@ export async function downloadYouTubeAudioToPath(
   // Create cookies file if needed
   const cookiesInfo = await createCookiesFileIfNeeded();
   const cookieArgs = getCookieArgs(cookiesInfo.path);
+  const proxyArgs = getProxyArgs();
 
   try {
     // Try multiple format selection strategies for better compatibility
@@ -319,6 +326,7 @@ export async function downloadYouTubeAudioToPath(
         "--no-playlist",
         "--ignore-errors", // Continue even if some formats fail
         ...cookieArgs,
+        ...proxyArgs,
         "-o",
         outputPath,
         url,

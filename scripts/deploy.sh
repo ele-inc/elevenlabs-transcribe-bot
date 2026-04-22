@@ -75,6 +75,12 @@ if [ -n "${YOUTUBE_COOKIES_BASE64:-}" ]; then
   echo "✅ Including YouTube cookies in deployment"
 fi
 
+# Add optional YouTube proxy if set
+if [ -n "${YOUTUBE_PROXY:-}" ]; then
+  ENV_VARS="$ENV_VARS,YOUTUBE_PROXY=$YOUTUBE_PROXY"
+  echo "✅ Including YouTube proxy in deployment"
+fi
+
 # Deploy with all environment variables and CPU optimization
 gcloud run deploy scribe-bot \
   --project="$GCP_PROJECT_ID" \
