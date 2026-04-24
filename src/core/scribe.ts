@@ -24,6 +24,7 @@ export async function transcribeAudioFile({
   userId,
   options,
   filename,
+  sourceUrl,
   isGoogleDrive,
   tempPath,
   adapter,
@@ -36,6 +37,7 @@ export async function transcribeAudioFile({
   userId: string;
   options: TranscriptionOptions;
   filename?: string;
+  sourceUrl?: string;
   isGoogleDrive?: boolean;
   tempPath?: string;
   adapter: PlatformAdapter;
@@ -72,9 +74,9 @@ export async function transcribeAudioFile({
     languageCode = result.languageCode;
 
     if (transcript) {
-      // Add header with filename if provided
-      const finalTranscript = filename
-        ? createTranscriptionHeader(filename) + transcript
+      // Add header: URL takes precedence over filename when present
+      const finalTranscript = sourceUrl || filename
+        ? createTranscriptionHeader(filename, sourceUrl) + transcript
         : transcript;
 
       await adapter.uploadTranscript(finalTranscript, filename);

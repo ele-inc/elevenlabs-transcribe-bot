@@ -76,6 +76,7 @@ export async function processCloudFile(
       userId: options.userId,
       options: options.transcriptionOptions,
       filename: result.metadata.filename,
+      sourceUrl: url,
       isGoogleDrive: true, // TODO: Update to isCloudFile
       tempPath: result.tempPath,
       adapter: options.adapter,

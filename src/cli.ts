@@ -147,9 +147,11 @@ async function main() {
     let actualFilePath = filePath;
     let filename = filePath;
     let mimeType: string | undefined;
+    let sourceUrl: string | undefined;
 
     // Check if input is a URL (specifically a supported cloud URL)
     if (cloudServiceManager.isSupportedUrl(filePath)) {
+      sourceUrl = filePath;
       console.log(`Detected supported cloud URL: ${filePath}`);
       console.log("Downloading file...");
 
@@ -215,10 +217,10 @@ async function main() {
       Deno.exit(1);
     }
 
-    // Add filename header to transcript
+    // Add header to transcript: URL takes precedence over filename when present
     const baseFilename = filename.split("/").pop() || filename;
-    const finalTranscript = createTranscriptionHeader(baseFilename) +
-      result.transcript;
+    const finalTranscript =
+      createTranscriptionHeader(baseFilename, sourceUrl) + result.transcript;
 
     // Determine output path
     let outputPath = options.output;
