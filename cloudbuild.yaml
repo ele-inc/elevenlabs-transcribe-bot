@@ -18,17 +18,12 @@ steps:
           GOOGLE_IMPERSONATE_EMAIL
           GOOGLE_PRIVATE_KEY
           GOOGLE_GENERATIVE_AI_API_KEY
+          YOUTUBE_PROXY
         )
-        OPTIONAL=(YOUTUBE_COOKIES_BASE64 YOUTUBE_PROXY)
 
         mapping=""
         for name in "$${SECRETS[@]}"; do
           mapping+="$${name}=$${name}:latest,"
-        done
-        for name in "$${OPTIONAL[@]}"; do
-          if gcloud secrets describe "$${name}" --project="$PROJECT_ID" &>/dev/null; then
-            mapping+="$${name}=$${name}:latest,"
-          fi
         done
         mapping="$${mapping%,}"
 
