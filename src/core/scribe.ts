@@ -81,7 +81,7 @@ export async function transcribeAudioFile({
       if (options.summarize !== false) {
         try {
           const summary = await summarizeTranscript(finalTranscript);
-          await adapter.sendSummary(summary);
+          await adapter.sendSummary(summary, { filename, options });
         } catch (error) {
           console.error("Failed to generate or send transcript summary:", error);
         }
