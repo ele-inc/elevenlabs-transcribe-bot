@@ -17,6 +17,7 @@ SECRETS=(
   GOOGLE_PRIVATE_KEY
   GOOGLE_GENERATIVE_AI_API_KEY
   YOUTUBE_PROXY
+  YOUTUBE_COOKIES_BASE64
 )
 
 if ! gcloud auth print-access-token &>/dev/null; then
