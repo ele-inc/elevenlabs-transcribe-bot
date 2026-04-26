@@ -1,3 +1,4 @@
+import { dirname } from "@std/path";
 import { TranscriptionOptions } from "../core/types.ts";
 import { transcribeAudioFile } from "../core/scribe.ts";
 import { cloudServiceManager } from "./cloud-service-manager.ts";
@@ -95,7 +96,7 @@ export async function processCloudFile(
     if (tempPath) {
       try {
         await Deno.remove(tempPath).catch(() => {});
-        const dirPath = tempPath.substring(0, tempPath.lastIndexOf("/"));
+        const dirPath = dirname(tempPath);
         await Deno.remove(dirPath, { recursive: true }).catch(() => {});
       } catch {
         // Ignore cleanup errors

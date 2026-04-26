@@ -1,3 +1,4 @@
+import { dirname, join } from "@std/path";
 import { CloudFileMetadata } from "../services/cloud-service.ts";
 import { config } from "../core/config.ts";
 import { TempFileManager } from "../services/temp-file-manager.ts";
@@ -376,11 +377,11 @@ export async function downloadYouTubeAudioToPath(
       fileExists = stat.isFile && stat.size > 0;
     } catch {
       // File doesn't exist at expected path, check if yt-dlp created a different filename
-      const outputDir = outputPath.substring(0, outputPath.lastIndexOf("/"));
+      const outputDir = dirname(outputPath);
       try {
         for await (const entry of Deno.readDir(outputDir)) {
           if (entry.isFile && entry.name.includes(".mp3")) {
-            const fullPath = `${outputDir}/${entry.name}`;
+            const fullPath = join(outputDir, entry.name);
             const stat = await Deno.stat(fullPath);
             if (stat.size > 0) {
               actualOutputPath = fullPath;

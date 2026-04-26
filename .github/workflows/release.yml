@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            asset: transcribe-bot-darwin-x64
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            asset: transcribe-bot-darwin-arm64
+            archive: tar.gz
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            asset: transcribe-bot-linux-x64
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            asset: transcribe-bot-windows-x64
+            archive: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Compile binary (Unix)
+        if: runner.os != 'Windows'
+        working-directory: src
+        run: deno compile -A --target ${{ matrix.target }} --output ../dist/transcribe-bot cli.ts
+
+      - name: Compile binary (Windows)
+        if: runner.os == 'Windows'
+        working-directory: src
+        run: deno compile -A --target ${{ matrix.target }} --output ../dist/transcribe-bot.exe cli.ts
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: tar -czf ${{ matrix.asset }}.tar.gz -C dist transcribe-bot
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        run: |
+          cd dist
+          7z a ../${{ matrix.asset }}.zip transcribe-bot.exe
+        shell: bash
+
+      - name: Compute sha256
+        shell: bash
+        run: |
+          if [[ "${{ matrix.archive }}" == "tar.gz" ]]; then
+            file="${{ matrix.asset }}.tar.gz"
+          else
+            file="${{ matrix.asset }}.zip"
+          fi
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            shasum -a 256 "$file" | tee "${file}.sha256"
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            sha256sum "$file" | tee "${file}.sha256"
+          else
+            sha256sum "$file" | tee "${file}.sha256"
+          fi
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ matrix.asset }}.tar.gz
+            ${{ matrix.asset }}.tar.gz.sha256
+            ${{ matrix.asset }}.zip
+            ${{ matrix.asset }}.zip.sha256
+          fail_on_unmatched_files: false

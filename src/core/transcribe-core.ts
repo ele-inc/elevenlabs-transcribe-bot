@@ -1,4 +1,5 @@
 import { ElevenLabsClient } from "elevenlabs";
+import { dirname } from "@std/path";
 import {
   TranscriptionOptions,
   WordItem,
@@ -13,9 +14,15 @@ import {
 import { identifySpeakers, replaceSpeakerLabels } from "../clients/gemini-client.ts";
 import { config } from "./config.ts";
 
-const elevenlabs = new ElevenLabsClient({
-  apiKey: config.elevenLabsApiKey,
-});
+let elevenlabsInstance: ElevenLabsClient | null = null;
+function getElevenLabsClient(): ElevenLabsClient {
+  if (!elevenlabsInstance) {
+    elevenlabsInstance = new ElevenLabsClient({
+      apiKey: config.elevenLabsApiKey,
+    });
+  }
+  return elevenlabsInstance;
+}
 
 export interface TranscriptionResult {
   transcript: string;
@@ -57,7 +64,7 @@ export async function transcribeCore(
   console.log(`Sending to ElevenLabs: filename=${filename}, type=${mimeType}, size=${file.size}`);
 
   // Call ElevenLabs API
-  const scribeResult = await elevenlabs.speechToText.convert({
+  const scribeResult = await getElevenLabsClient().speechToText.convert({
     file: file,
     model_id: "scribe_v2",
     tag_audio_events: options.tagAudioEvents,
@@ -192,7 +199,7 @@ export async function transcribeFile(
     if (audioFilePath) {
       console.log("Cleaning up converted audio file:", audioFilePath);
       await Deno.remove(audioFilePath).catch(() => {});
-      const audioDir = audioFilePath.substring(0, audioFilePath.lastIndexOf("/"));
+      const audioDir = dirname(audioFilePath);
       await Deno.remove(audioDir).catch(() => {});
     }
   }

@@ -3,6 +3,8 @@
  * Handles creation, cleanup, and management of temporary files
  */
 
+import { dirname, join } from "@std/path";
+
 export class TempFileManager {
   private tempPaths: Set<string> = new Set();
   private tempDirs: Set<string> = new Set();
@@ -22,7 +24,7 @@ export class TempFileManager {
   async createTempFile(prefix: string, extension: string): Promise<string> {
     const tempDir = await this.createTempDir();
     const filename = `${prefix}_${Date.now()}.${extension}`;
-    const tempPath = `${tempDir}/${filename}`;
+    const tempPath = join(tempDir, filename);
     this.tempPaths.add(tempPath);
     return tempPath;
   }
@@ -32,7 +34,7 @@ export class TempFileManager {
    */
   async createGoogleDriveTempFile(): Promise<string> {
     const tempDir = await this.createTempDir();
-    const tempPath = `${tempDir}/gdrive_${Date.now()}.tmp`;
+    const tempPath = join(tempDir, `gdrive_${Date.now()}.tmp`);
     this.tempPaths.add(tempPath);
     return tempPath;
   }
@@ -85,7 +87,7 @@ export class TempFileManager {
   async cleanupFileAndDir(filePath: string): Promise<void> {
     await this.cleanupFile(filePath);
     
-    const dirPath = filePath.substring(0, filePath.lastIndexOf("/"));
+    const dirPath = dirname(filePath);
     if (this.tempDirs.has(dirPath)) {
       await this.cleanupDir(dirPath);
     }

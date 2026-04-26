@@ -1,10 +1,61 @@
 #!/usr/bin/env -S deno run --allow-all
 
-import "@std/dotenv/load";
+import { load } from "@std/dotenv";
+import { basename, join } from "@std/path";
 import { transcribeFile } from "./core/transcribe-core.ts";
 import { TranscriptionOptions } from "./core/types.ts";
 import { createTranscriptionHeader } from "./utils/utils.ts";
 import { cloudServiceManager } from "./services/cloud-service-manager.ts";
+import { runInit } from "./init.ts";
+
+function userConfigEnvPath(): string {
+  const home = Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || "";
+  return join(home, ".config", "transcribe-bot", ".env");
+}
+
+async function loadEnvFromKnownLocations(): Promise<void> {
+  if (Deno.env.get("ELEVENLABS_API_KEY")) return;
+
+  const candidates = [join(Deno.cwd(), ".env"), userConfigEnvPath()];
+  for (const path of candidates) {
+    try {
+      await Deno.stat(path);
+      await load({ envPath: path, export: true });
+      return;
+    } catch {
+      // try next candidate
+    }
+  }
+}
+
+async function copyToClipboard(content: string): Promise<void> {
+  const candidates: Array<{ cmd: string; args: string[] }> = Deno.build.os ===
+      "darwin"
+    ? [{ cmd: "pbcopy", args: [] }]
+    : Deno.build.os === "windows"
+    ? [{ cmd: "clip.exe", args: [] }, { cmd: "clip", args: [] }]
+    : [
+      { cmd: "wl-copy", args: [] },
+      { cmd: "xclip", args: ["-selection", "clipboard"] },
+      { cmd: "xsel", args: ["--clipboard", "--input"] },
+    ];
+
+  for (const { cmd, args } of candidates) {
+    try {
+      const proc = new Deno.Command(cmd, { args, stdin: "piped" }).spawn();
+      const writer = proc.stdin.getWriter();
+      await writer.write(new TextEncoder().encode(content));
+      await writer.close();
+      const { success } = await proc.output();
+      if (success) {
+        console.log("\n📋 Transcript copied to clipboard!");
+        return;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+}
 
 interface CliOptions extends TranscriptionOptions {
   output?: string;
@@ -95,10 +146,14 @@ function printHelp(): void {
   console.log(`
 ElevenLabs Transcription CLI
 
-Usage: deno run --allow-all src/cli.ts [options] <file>
+Usage: transcribe-bot [options] <file-or-url>
+       transcribe-bot init
+
+Subcommands:
+  init                 Interactively set API keys (saved to ~/.config/transcribe-bot/.env)
 
 Arguments:
-  <file>                Path to audio/video file to transcribe, or supported URL (Google Drive/Dropbox/YouTube)
+  <file-or-url>        Path to audio/video file, or supported URL (Google Drive/Dropbox/YouTube)
 
 Options:
   -h, --help           Show this help message
@@ -139,6 +194,13 @@ Note: Video files (mp4, mkv, mov, etc.) will be automatically converted to audio
  * Main function
  */
 async function main() {
+  if (Deno.args[0] === "init") {
+    await runInit(userConfigEnvPath());
+    return;
+  }
+
+  await loadEnvFromKnownLocations();
+
   let tempFilePath: string | undefined;
 
   try {
@@ -189,12 +251,8 @@ async function main() {
     // Check if API key is loaded
     const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
     if (!apiKey) {
-      console.error(
-        "Error: ELEVENLABS_API_KEY not found in environment variables",
-      );
-      console.error(
-        "Please ensure .env file exists and contains ELEVENLABS_API_KEY",
-      );
+      console.error("Error: ELEVENLABS_API_KEY not found.");
+      console.error("Run `transcribe-bot init` to configure API keys.");
       Deno.exit(1);
     }
 
@@ -218,7 +276,7 @@ async function main() {
     }
 
     // Add header to transcript: URL takes precedence over filename when present
-    const baseFilename = filename.split("/").pop() || filename;
+    const baseFilename = basename(filename);
     const finalTranscript =
       createTranscriptionHeader(baseFilename, sourceUrl) + result.transcript;
 
@@ -242,8 +300,10 @@ async function main() {
       );
       const cleanedFilename = baseFilename.replace(/\.[^/.]+$/, ""); // Remove extension
       const extension = options.format === "json" ? "json" : "txt";
-      outputPath =
-        `${transcriptsDir}/${cleanedFilename}_${timestamp}.${extension}`;
+      outputPath = join(
+        transcriptsDir,
+        `${cleanedFilename}_${timestamp}.${extension}`,
+      );
 
       // Check if a file with the same name already exists (shouldn't happen, but let's be safe)
       try {
@@ -283,7 +343,7 @@ async function main() {
       }
     }
 
-    // Copy transcript text to clipboard (macOS)
+    // Copy transcript text to clipboard
     const clipboardContent = options.format === "json"
       ? JSON.stringify(
           {
@@ -297,21 +357,7 @@ async function main() {
         )
       : finalTranscript;
 
-    try {
-      const pbcopy = new Deno.Command("pbcopy", {
-        stdin: "piped",
-      });
-      const process = pbcopy.spawn();
-      const writer = process.stdin.getWriter();
-      await writer.write(new TextEncoder().encode(clipboardContent));
-      await writer.close();
-      const { success } = await process.output();
-      if (success) {
-        console.log("\n📋 Transcript copied to clipboard!");
-      }
-    } catch {
-      // pbcopy not available (non-macOS), silently skip
-    }
+    await copyToClipboard(clipboardContent);
 
     console.log("\nTranscription completed successfully!");
 
