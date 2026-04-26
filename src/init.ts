@@ -43,14 +43,16 @@ export async function runInit(envPath: string): Promise<void> {
     Deno.exit(1);
   }
 
-  const openai = await ask(
-    "OpenAI API key (optional, used for --speaker-names): ",
+  const gemini = await ask(
+    "Google Generative AI API key (optional, used for --speaker-names): ",
   );
 
   const lines = [
     `ELEVENLABS_API_KEY=${escapeEnvValue(elevenlabs)}`,
   ];
-  if (openai) lines.push(`OPENAI_API_KEY=${escapeEnvValue(openai)}`);
+  if (gemini) {
+    lines.push(`GOOGLE_GENERATIVE_AI_API_KEY=${escapeEnvValue(gemini)}`);
+  }
 
   await Deno.mkdir(dirname(envPath), { recursive: true });
   await Deno.writeTextFile(envPath, lines.join("\n") + "\n");
