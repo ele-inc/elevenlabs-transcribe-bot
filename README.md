@@ -1,28 +1,28 @@
 # ElevenLabs Transcribe Bot for Slack & Discord
 
-A multi-platform bot that uses the [ElevenLabs Scribe API](https://elevenlabs.io/speech-to-text) to transcribe audio and video files. Supports both Slack and Discord platforms with unified transcription capabilities. Built with Deno and runs on Google Cloud Run.
+[ElevenLabs Scribe API](https://elevenlabs.io/speech-to-text) を使って音声・動画ファイルを文字起こしするマルチプラットフォーム Bot です。Slack と Discord の両方に対応しています。Deno で実装され、Google Cloud Run 上で動作します。
 
-## Features
+## 機能
 
-- **Multi-platform support:** Works with both Slack and Discord
-- Transcribes audio and video files when mentioned or via slash commands
-- **Google Drive & YouTube integration:** Supports Google Drive file links and YouTube URLs for transcription
-- **Speaker diarization:** Identifies different speakers in the conversation
-- **Automatic timestamps:** Adds timestamps for better navigation
-- **Audio event detection:** Detects music, laughter, and other audio events
-- **Flexible output:** Returns transcripts as text files in the conversation thread
+- **マルチプラットフォーム対応:** Slack と Discord の両方で動作
+- メンション or スラッシュコマンドで送られた音声・動画ファイルを文字起こし
+- **Google Drive・YouTube 連携:** Google Drive のファイルリンクや YouTube URL からの文字起こしに対応
+- **話者識別 (diarization):** 会話中の異なる話者を識別
+- **タイムスタンプ自動付与:** 発話位置のナビゲーション用にタイムスタンプを付ける
+- **音声イベント検出:** 音楽・笑い声などの音声イベントを検出
+- **柔軟な出力:** 文字起こし結果をテキストファイルとしてスレッドに返却
 
-## Transcription Options
+## 文字起こしオプション
 
-You can customize the transcription by adding options when mentioning the bot:
+Bot をメンションする際にオプションを追加してカスタマイズできます：
 
-- `--no-diarize` - Disable speaker identification (default: enabled)
-- `--no-timestamp` - Disable timestamps (default: enabled)
-- `--no-audio-events` - Disable audio event detection (default: enabled)
-- `--num-speakers N` - Specify the number of speakers (1-32, default: 2 when diarization is enabled)
-- `--speaker-names "<name1>,<name2>"` - Specify speaker names (AI will automatically identify who is who)
+- `--no-diarize` — 話者識別を無効化（デフォルト: 有効）
+- `--no-timestamp` — タイムスタンプを無効化（デフォルト: 有効）
+- `--no-audio-events` — 音声イベント検出を無効化（デフォルト: 有効）
+- `--num-speakers N` — 話者数を指定（1〜32、話者識別有効時のデフォルト: 2）
+- `--speaker-names "<name1>,<name2>"` — 話者名を指定（AI が誰がどの speaker かを自動的に推定）
 
-Example:
+例：
 
 ```
 @bot transcribe this file --no-timestamp --no-diarize
@@ -31,54 +31,54 @@ Example:
 @bot transcribe this file --speaker-names "田中,山田"
 ```
 
-**Note:**
+**注意：**
 
-- The `--num-speakers` option only works when speaker diarization is enabled (default). If you use `--no-diarize`, the num-speakers setting will be ignored.
-- The `--speaker-names` option uses OpenAI to automatically identify which speaker is which based on the conversation content. You need to set `OPENAI_API_KEY` in your environment variables for this feature to work.
+- `--num-speakers` は話者識別が有効な時のみ機能します。`--no-diarize` を指定すると `--num-speakers` は無視されます。
+- `--speaker-names` は会話内容を Google Gemini に渡して話者を自動推定します。この機能を使うには `GOOGLE_GENERATIVE_AI_API_KEY` を環境変数にセットする必要があります。
 
-## Project Structure
+## プロジェクト構成
 
 ```
 src/
-├── index.ts          # Main entry point and request router
-├── slack-handler.ts  # Slack event handler
-├── discord-handler.ts # Discord interaction handler
-├── scribe.ts         # ElevenLabs Scribe API integration
-├── slack.ts          # Slack API utilities
-├── discord.ts        # Discord API utilities
-├── types.ts          # TypeScript type definitions
-└── utils.ts          # Helper functions for text processing
+├── index.ts          # メインエントリーポイント、リクエストルーティング
+├── slack-handler.ts  # Slack イベントハンドラ
+├── discord-handler.ts # Discord インタラクションハンドラ
+├── scribe.ts         # ElevenLabs Scribe API 連携
+├── slack.ts          # Slack API ユーティリティ
+├── discord.ts        # Discord API ユーティリティ
+├── types.ts          # TypeScript 型定義
+└── utils.ts          # テキスト処理用ヘルパー
 ```
 
-## Tech Stack
+## 技術スタック
 
-- [Deno](https://deno.land/) - JavaScript/TypeScript runtime
-- [Google Cloud Run](https://cloud.google.com/run) - Container hosting platform
-- [ElevenLabs Scribe API](https://elevenlabs.io/docs/api-reference/speech-to-text) - Speech-to-text transcription
-- Slack Events API - Slack bot event handling
-- Discord Interactions API - Discord bot interaction handling
+- [Deno](https://deno.land/) — JavaScript/TypeScript ランタイム
+- [Google Cloud Run](https://cloud.google.com/run) — コンテナホスティング
+- [ElevenLabs Scribe API](https://elevenlabs.io/docs/api-reference/speech-to-text) — 音声認識
+- Slack Events API — Slack Bot のイベント処理
+- Discord Interactions API — Discord Bot のインタラクション処理
 
-## Setup
+## セットアップ
 
-### Prerequisites
+### 前提条件
 
-- [Deno](https://deno.land/manual/getting_started/installation) installed
-- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) installed
-- An ElevenLabs account and API key.
-- A Google Cloud project with Cloud Run enabled.
-- A Slack app with bot token and signing secret (for Slack bot).
-- A Discord application with bot token and public key (for Discord bot).
+- [Deno](https://deno.land/manual/getting_started/installation) がインストール済み
+- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) がインストール済み
+- ElevenLabs アカウントと API キー
+- Cloud Run が有効な Google Cloud プロジェクト
+- Slack アプリ（Bot トークンと署名シークレット、Slack Bot 用）
+- Discord アプリ（Bot トークンと公開鍵、Discord Bot 用）
 
-### 1. Clone the repository
+### 1. リポジトリを clone
 
 ```bash
 git clone <repository-url>
 cd <repository-name>
 ```
 
-### 2. Set up environment variables
+### 2. 環境変数の設定
 
-Create a `.env` file in the project root directory and add the following environment variables.
+プロジェクトルートに `.env` ファイルを作成し、以下を記載します：
 
 ```
 ELEVENLABS_API_KEY="your-elevenlabs-api-key"
@@ -86,24 +86,24 @@ SLACK_BOT_TOKEN="your-slack-bot-token"
 DISCORD_APPLICATION_ID="your-discord-app-id"
 DISCORD_PUBLIC_KEY="your-discord-public-key"
 DISCORD_BOT_TOKEN="your-discord-bot-token"
-GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account","project_id":"..."}'  # Google service account JSON
+GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account","project_id":"..."}'  # Google サービスアカウント JSON
 
-# YouTube cookies (optional, required for some videos)
-# For Cloud Run: Base64-encoded cookies file content
+# YouTube cookies（オプション、一部の動画で必要）
+# Cloud Run 用：cookies ファイル内容を Base64 エンコードしたもの
 YOUTUBE_COOKIES_BASE64="base64-encoded-cookies-content"
-# For local/container: Path to cookies file
+# ローカル / コンテナ用：cookies ファイルへのパス
 # YOUTUBE_COOKIES="/path/to/cookies.txt"
 ```
 
-### 3. Deploy to Cloud Run
+### 3. Cloud Run へデプロイ
 
-Deploy the bot to Google Cloud Run:
+Bot を Google Cloud Run にデプロイします：
 
 ```bash
 make deploy
 ```
 
-Or manually:
+または手動で：
 
 ```bash
 gcloud run deploy scribe-bot \
@@ -112,180 +112,180 @@ gcloud run deploy scribe-bot \
   --allow-unauthenticated
 ```
 
-### 4. Set up the Slack App
+### 4. Slack アプリの設定
 
-1. Create a new Slack app at https://api.slack.com/apps
-2. Go to "OAuth & Permissions" and add the following bot token scopes:
-   - `app_mentions:read` - To detect when the bot is mentioned
-   - `files:read` - To read file information
-   - `files:write` - To upload transcript files
-   - `chat:write` - To send messages
-3. Install the app to your workspace and copy the Bot User OAuth Token
-4. Go to "Event Subscriptions" and enable events
-5. Set the Request URL to your Cloud Run URL:
+1. https://api.slack.com/apps で新規 Slack アプリを作成
+2. 「OAuth & Permissions」で以下の Bot Token Scope を追加：
+   - `app_mentions:read` — Bot がメンションされたことを検知
+   - `files:read` — ファイル情報の読み取り
+   - `files:write` — 文字起こしファイルのアップロード
+   - `chat:write` — メッセージ送信
+3. Workspace にインストールし、Bot User OAuth Token をコピー
+4. 「Event Subscriptions」でイベントを有効化
+5. Request URL に Cloud Run の URL を設定：
    ```
    https://YOUR-CLOUD-RUN-URL/slack/events
    ```
-6. Subscribe to the following bot events:
-   - `app_mention` - To detect when the bot is mentioned with files
-7. Go to "Basic Information" and copy the Signing Secret
+6. 以下の Bot イベントを購読：
+   - `app_mention` — Bot がファイル付きでメンションされたことを検知
+7. 「Basic Information」から Signing Secret をコピー
 
-### 5. Set up the Discord Bot
+### 5. Discord Bot の設定
 
-1. Create a new Discord application at https://discord.com/developers/applications
-2. Go to the "Bot" section and create a bot
-3. Copy the Bot Token (you'll need this for `DISCORD_BOT_TOKEN`)
-4. Go to the "General Information" section and copy:
-   - Application ID (for `DISCORD_APPLICATION_ID`)
-   - Public Key (for `DISCORD_PUBLIC_KEY`)
-5. Go to the "Interactions Endpoint URL" section and set it to:
+1. https://discord.com/developers/applications で新規 Discord アプリを作成
+2. 「Bot」セクションで Bot を作成
+3. Bot Token をコピー（`DISCORD_BOT_TOKEN` に使用）
+4. 「General Information」から以下をコピー：
+   - Application ID（`DISCORD_APPLICATION_ID` 用）
+   - Public Key（`DISCORD_PUBLIC_KEY` 用）
+5. 「Interactions Endpoint URL」に以下を設定：
    ```
    https://YOUR-CLOUD-RUN-URL/discord/interactions
    ```
-6. In the "Bot" section, enable the following Privileged Gateway Intents:
-   - MESSAGE CONTENT INTENT (to read message content)
-7. Generate an invite URL from the "OAuth2 > URL Generator" section with:
+6. 「Bot」セクションで以下の Privileged Gateway Intents を有効化：
+   - MESSAGE CONTENT INTENT（メッセージ本文の読み取り）
+7. 「OAuth2 > URL Generator」で以下の権限の招待 URL を生成：
    - Scopes: `bot`, `applications.commands`
    - Bot Permissions: `Send Messages`, `Attach Files`, `Read Message History`
-8. Use the generated URL to invite the bot to your Discord server
-9. Register slash commands by running:
+8. 生成された URL から Bot を Discord サーバーに招待
+9. スラッシュコマンドを登録：
    ```bash
    npm run register-discord-commands
    ```
 
-The Cloud Run URL can be found in the output of the `gcloud run deploy` command or in your Google Cloud Console.
+Cloud Run の URL は `gcloud run deploy` の出力、または Google Cloud Console で確認できます。
 
-## Usage
+## 使い方
 
 ### Slack
 
-#### With file uploads:
+#### ファイルアップロードで使う：
 
-1. Upload an audio or video file to a Slack channel
-2. Mention the bot in the same message or as a reply
-3. (Optional) Add transcription options like `--no-timestamp` or `--no-diarize`
-4. The bot will process the file and reply with a transcript text file
+1. Slack チャンネルに音声・動画ファイルをアップロード
+2. 同じメッセージ or リプライで Bot をメンション
+3. （任意）`--no-timestamp` や `--no-diarize` などのオプションを追加
+4. Bot がファイルを処理し、文字起こしのテキストファイルを返信
 
-#### With Google Drive / YouTube links:
+#### Google Drive / YouTube リンクで使う：
 
-1. Share a Google Drive video/audio file link in a message
-   - For YouTube, paste the video URL instead
-2. Mention the bot in the same message with the link
-3. (Optional) Add transcription options
-4. The bot will download from Google Drive/YouTube and transcribe
+1. メッセージに Google Drive の動画 / 音声ファイルのリンクを貼る
+   - YouTube の場合は動画 URL を貼り付け
+2. 同じメッセージで Bot をメンション
+3. （任意）オプションを追加
+4. Bot が Google Drive / YouTube からダウンロードして文字起こし
 
-Example: `@bot https://drive.google.com/file/d/xxxxx/view --num-speakers 3`
-Example: `@bot https://www.youtube.com/watch?v=xxxxxxx --no-timestamp`
+例: `@bot https://drive.google.com/file/d/xxxxx/view --num-speakers 3`
+例: `@bot https://www.youtube.com/watch?v=xxxxxxx --no-timestamp`
 
-**Note:** Some YouTube videos may require authentication cookies to download. See the "YouTube Cookies Setup" section below.
+**注意:** 一部の YouTube 動画はダウンロードに認証 cookie が必要です。下記「YouTube Cookies のセットアップ」を参照してください。
 
 ### Discord
 
-#### Using slash commands:
+#### スラッシュコマンドで使う：
 
-1. Use the `/transcribe` command in any channel
-2. Attach an audio or video file to the command
-3. (Optional) Add transcription options as command parameters
-4. The bot will reply with the transcript as a text file
+1. 任意のチャンネルで `/transcribe` コマンドを使用
+2. 音声・動画ファイルをコマンドに添付
+3. （任意）パラメータでオプションを追加
+4. Bot が文字起こしをテキストファイルで返信
 
-#### With file uploads:
+#### ファイルアップロードで使う：
 
-1. Upload an audio or video file to a Discord channel
-2. Reply to the message with `/transcribe` command
-3. (Optional) Add transcription options
-4. The bot will process and return the transcript
+1. Discord チャンネルに音声・動画ファイルをアップロード
+2. そのメッセージにリプライで `/transcribe` コマンドを使用
+3. （任意）オプションを追加
+4. Bot が処理して文字起こしを返却
 
-#### With Google Drive / YouTube links:
+#### Google Drive / YouTube リンクで使う：
 
-1. Use `/transcribe url:<drive_link>` command (YouTube URLs are also supported)
-2. (Optional) Add transcription options as parameters
-3. The bot will download and transcribe the file
+1. `/transcribe url:<drive_link>` コマンドを使用（YouTube URL も可）
+2. （任意）パラメータでオプションを追加
+3. Bot がダウンロードして文字起こし
 
-Example: `/transcribe url:https://drive.google.com/file/d/xxxxx/view speakers:3`
-Example: `/transcribe url:https://www.youtube.com/watch?v=xxxxxxx`
+例: `/transcribe url:https://drive.google.com/file/d/xxxxx/view speakers:3`
+例: `/transcribe url:https://www.youtube.com/watch?v=xxxxxxx`
 
-**Note:** Some YouTube videos may require authentication cookies to download. See the "YouTube Cookies Setup" section below.
+**注意:** 一部の YouTube 動画はダウンロードに認証 cookie が必要です。下記「YouTube Cookies のセットアップ」を参照してください。
 
-## YouTube Cookies Setup
+## YouTube Cookies のセットアップ
 
-If you encounter "Sign in to confirm you're not a bot" errors when transcribing YouTube videos, you need to provide authentication cookies.
+YouTube 動画の文字起こしで「Sign in to confirm you're not a bot」エラーが出る場合は、認証 cookie を提供する必要があります。
 
-### Why This Error Occurs in Cloud Run but Not Locally
+### なぜ Cloud Run でこのエラーが出るのか（ローカルでは出ないのに）
 
-This error is more likely to occur in Cloud Run or other cloud environments than on your local Mac for several reasons:
+このエラーは、ローカル Mac よりも Cloud Run などのクラウド環境で起こりやすいです。理由：
 
-1. **IP Address Reputation**:
-   - **Cloud Run**: Uses shared data center IP addresses that are often flagged by YouTube's bot detection systems
-   - **Your Mac**: Uses residential/office IP addresses that YouTube trusts more as legitimate user traffic
+1. **IP アドレスのレピュテーション**:
+   - **Cloud Run**: データセンターの共用 IP を使うので、YouTube の Bot 検出システムにフラグされやすい
+   - **あなたの Mac**: 家庭・オフィスの IP は通常のユーザートラフィックとして信頼される
 
-2. **Access Patterns**:
-   - **Cloud Run**: Automated requests from server environments are more suspicious
-   - **Your Mac**: Manual commands appear more like normal user behavior
+2. **アクセスパターン**:
+   - **Cloud Run**: サーバー環境からの自動リクエストは怪しまれやすい
+   - **あなたの Mac**: 手動コマンドは普通のユーザー行動に見える
 
-3. **Network Context**:
-   - Data center networks have a history of automated scraping, making them higher risk
-   - Residential networks are associated with human users
+3. **ネットワーク環境**:
+   - データセンターは過去にスクレイピングが多く、リスクが高いと判定される
+   - 家庭ネットワークは人間ユーザーと結び付けられている
 
-**Solution**: Providing YouTube cookies helps authenticate the requests, making them appear as legitimate logged-in user access rather than anonymous bot traffic.
+**解決策**: YouTube cookie を提供することでログイン済みユーザーとしてリクエストが認証され、匿名 Bot トラフィックではなく正規のアクセスとして扱われます。
 
-### Getting YouTube Cookies
+### YouTube Cookie の取得方法
 
-#### Method 1: Browser Extension (Recommended)
+#### 方法 1: ブラウザ拡張機能（推奨）
 
-This is the easiest and most reliable method:
+最も簡単で確実な方法です：
 
-**For Chrome/Edge:**
+**Chrome / Edge の場合:**
 
-1. Install the extension "Get cookies.txt LOCALLY" from Chrome Web Store
-2. Open YouTube (https://www.youtube.com) in your browser and **make sure you're logged in**
-3. Click on the extension icon in your toolbar
-4. Click "Export" → The extension will automatically format the cookies in Netscape format
-5. Save the file as `cookies.txt` (the extension usually does this automatically)
-6. The file will be downloaded to your Downloads folder
+1. Chrome ウェブストアから「Get cookies.txt LOCALLY」拡張機能をインストール
+2. ブラウザで YouTube (https://www.youtube.com) を開き、**ログイン状態であることを確認**
+3. ツールバーの拡張機能アイコンをクリック
+4. 「Export」をクリック → 拡張機能が cookie を Netscape 形式で自動フォーマット
+5. `cookies.txt` として保存（拡張機能が自動でやってくれることが多い）
+6. ファイルが Downloads フォルダにダウンロードされる
 
-**For Firefox:**
+**Firefox の場合:**
 
-1. Install the extension "cookies.txt" from Firefox Add-ons
-2. Open YouTube (https://www.youtube.com) and **make sure you're logged in**
-3. Click on the extension icon
-4. Click "Export" → Save as `cookies.txt`
+1. Firefox Add-ons から「cookies.txt」拡張機能をインストール
+2. YouTube (https://www.youtube.com) を開き、**ログイン状態であることを確認**
+3. 拡張機能アイコンをクリック
+4. 「Export」をクリック → `cookies.txt` として保存
 
-**Important**: Make sure you're **logged into YouTube** before exporting cookies, otherwise the cookies won't have authentication information.
+**重要**: cookie をエクスポートする前に必ず **YouTube にログイン**しておいてください。ログインしていないと認証情報が含まれません。
 
-#### Method 2: Using yt-dlp Directly
+#### 方法 2: yt-dlp を直接使う
 
-If you have `yt-dlp` installed locally, you can extract cookies from your browser:
+ローカルに `yt-dlp` がインストール済みなら、ブラウザから直接 cookie を抽出できます：
 
 ```bash
-# Extract cookies from Chrome (most common)
+# Chrome から抽出（一般的）
 yt-dlp --cookies-from-browser chrome --print "%(title)s" "https://www.youtube.com/watch?v=VIDEO_ID"
 
-# Extract cookies from Firefox
+# Firefox から抽出
 yt-dlp --cookies-from-browser firefox --print "%(title)s" "https://www.youtube.com/watch?v=VIDEO_ID"
 
-# Extract cookies from Safari (macOS)
+# Safari から抽出（macOS）
 yt-dlp --cookies-from-browser safari --print "%(title)s" "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-To save cookies to a file:
+cookie をファイルに保存する場合：
 
 ```bash
-# This will use cookies from browser but you still need to export them manually
-# The browser extension method is easier for getting the actual cookies.txt file
+# ブラウザの cookie を使うが、cookies.txt 自体は手動エクスポートが必要
+# 実際の cookies.txt ファイルを得るにはブラウザ拡張の方法が楽
 ```
 
-**Note**: Method 2 requires that your browser is still logged into YouTube. The browser extension method (Method 1) is generally easier and more reliable.
+**注意**: 方法 2 はブラウザが YouTube にログイン済みである必要があります。実際の cookies.txt ファイルを得たい場合はブラウザ拡張（方法 1）の方が簡単で確実です。
 
-### For Cloud Run Deployment
+### Cloud Run デプロイ用
 
-1. Export your cookies to a `cookies.txt` file (see above)
-2. Base64-encode the file content:
+1. cookie を `cookies.txt` ファイルにエクスポート（上記参照）
+2. ファイル内容を Base64 エンコード：
    ```bash
    base64 -i cookies.txt -o cookies_base64.txt
-   # Or on macOS:
+   # macOS の場合:
    base64 cookies.txt > cookies_base64.txt
    ```
-3. Add the Base64-encoded content to your Cloud Run environment variables:
+3. Base64 エンコード済みの内容を Cloud Run の環境変数に追加：
 
    ```bash
    gcloud run services update scribe-bot \
@@ -293,63 +293,63 @@ To save cookies to a file:
      --set-env-vars YOUTUBE_COOKIES_BASE64="$(cat cookies_base64.txt)"
    ```
 
-   Or add it to your `.env` file:
+   または `.env` ファイルに追加：
 
    ```
-   YOUTUBE_COOKIES_BASE64="<paste base64 content here>"
+   YOUTUBE_COOKIES_BASE64="<ここに Base64 内容を貼り付け>"
    ```
 
-### For Local/Container Usage
+### ローカル / コンテナ利用
 
-If running locally or in a container with file access:
+ローカルやコンテナでファイルアクセス可能な場合：
 
-1. Place the `cookies.txt` file in your project directory or container
-2. Set the environment variable:
+1. `cookies.txt` をプロジェクトディレクトリかコンテナ内に配置
+2. 環境変数を設定：
    ```
    YOUTUBE_COOKIES="/path/to/cookies.txt"
    ```
 
-**Important Notes:**
+**重要事項：**
 
-- **Cookie Expiration**: YouTube cookies typically expire after several months (usually 6-8 months). When cookies expire, you'll see the same "Sign in to confirm you're not a bot" error again.
-- **Cookie Refresh**: To refresh expired cookies:
-  1. Re-export cookies from your browser (following the steps in "Getting YouTube Cookies" above)
-  2. Base64-encode the new cookies file
-  3. Update the `YOUTUBE_COOKIES_BASE64` environment variable in Cloud Run:
+- **Cookie の有効期限**: YouTube cookie は通常数ヶ月（6〜8ヶ月程度）で失効します。失効すると同じ「Sign in to confirm you're not a bot」エラーが再発します。
+- **Cookie の更新方法**: 失効した cookie をリフレッシュするには：
+  1. ブラウザから cookie を再エクスポート（「YouTube Cookie の取得方法」参照）
+  2. 新しい cookies ファイルを Base64 エンコード
+  3. Cloud Run の `YOUTUBE_COOKIES_BASE64` 環境変数を更新：
      ```bash
      gcloud run services update scribe-bot \
        --region asia-northeast1 \
        --update-env-vars YOUTUBE_COOKIES_BASE64="$(cat cookies_base64.txt)"
      ```
-  4. Or update your `.env` file and redeploy
-- **Monitoring**: If you start seeing authentication errors again after working fine, it's likely that the cookies have expired.
-- **Security**: Keep your cookies file secure and never commit it to version control
-- **Compliance**: Using cookies must comply with YouTube's Terms of Service
+  4. または `.env` を更新して再デプロイ
+- **モニタリング**: 動いていたのに突然認証エラーが出始めたら、cookie 失効の可能性が高いです。
+- **セキュリティ**: cookies ファイルは大切に管理し、絶対にバージョン管理にコミットしないでください。
+- **コンプライアンス**: cookie の利用は YouTube の利用規約を遵守すること。
 
-### Supported File Formats
+### 対応ファイル形式
 
-- Audio: MP3, WAV, M4A, AAC, OGG, WebM
-- Video: MP4, MOV, AVI, MPEG, WebM
+- 音声: MP3, WAV, M4A, AAC, OGG, WebM
+- 動画: MP4, MOV, AVI, MPEG, WebM
 
-### Output Format
+### 出力フォーマット
 
-The transcript will be formatted based on your options:
+オプションによって出力形式が変わります：
 
-**With speaker diarization (default):**
+**話者識別あり（デフォルト）:**
 
 ```
 [0:00] speaker_0: こんにちは、今日の会議を始めます。
 [0:05] speaker_1: よろしくお願いします。
 ```
 
-**Without speaker diarization:**
+**話者識別なし:**
 
 ```
 [0:00] こんにちは、今日の会議を始めます。
 [0:05] よろしくお願いします。
 ```
 
-**Without timestamps:**
+**タイムスタンプなし:**
 
 ```
 speaker_0: こんにちは、今日の会議を始めます。
@@ -358,7 +358,7 @@ speaker_1: よろしくお願いします。
 
 ## Slackでの文字起こしフロー
 
-非エンジニア向けの説明です。登場人物は「ユーザー」「Slack」「Bot」「ElevenLabs」「gpt-4o」です。
+非エンジニア向けの説明です。登場人物は「ユーザー」「Slack」「Bot」「ElevenLabs」「Gemini」です。
 
 ### 全体シーケンス (Mermaid)
 
@@ -368,7 +368,7 @@ sequenceDiagram
   participant S as Slack
   participant B as Bot
   participant EL as ElevenLabs
-  participant OA as gpt-4o
+  participant GE as Gemini
 
   U->>S: @bot + 音声/動画ファイル or リンク + オプション
   S->>B: メンションを通知
@@ -384,8 +384,8 @@ sequenceDiagram
   EL-->>B: 文字起こし結果（speaker_0, speaker_1 などのラベル付き）
 
   opt --speaker-names を指定した場合
-    B->>OA: 文字起こし + 候補名を渡して「誰が誰か」を推定
-    OA-->>B: speaker_N → 名前 の対応案
+    B->>GE: 文字起こし + 候補名を渡して「誰が誰か」を推定
+    GE-->>B: speaker_N → 名前 の対応案
     B->>B: ラベルを人物名に置換
   end
 
@@ -401,13 +401,13 @@ sequenceDiagram
 
 - **段階2: ラベル→人物名の推定（任意）**
   - `--speaker-names "田中,山田"` のように候補名を与えた場合のみ実行されます。
-  - Botが文字起こし内容（語彙、一人称、呼称、文脈など）を **gpt-4o** に渡し、`speaker_N` と候補名の対応を推定します。
+  - Botが文字起こし内容（語彙、一人称、呼称、文脈など）を **Gemini** に渡し、`speaker_N` と候補名の対応を推定します。
   - これは音の特徴から個人を特定するものではなく、テキストだけを根拠にした推測です。候補名リストにない名前は使いません。
 
 ### 重要な注意点（正確さの限界）
 
 - **話者名の確定は厳密ではありません。** ElevenLabsの話者分離は強力ですが、`speaker_0`→実在の人物名の割当は
-  gpt-4oによるテキスト推論のため、誤割当（入れ替わり・混在）が起こり得ます。
+  Geminiによるテキスト推論のため、誤割当（入れ替わり・混在）が起こり得ます。
 - **候補名の質と数に依存します。** 候補が多すぎる／似た役割の人が多いと誤りが増えます。できるだけ必要最小限の候補に絞ると良いです。
 - **`--num-speakers` の誤指定は悪影響。** 実際より多い/少ない話者数を指定すると分離と整形の両方に影響します。
 - **完全な音声話者認識ではありません。** 声質そのものから個人を同定する処理は行っていません。
