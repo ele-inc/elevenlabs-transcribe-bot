@@ -8,6 +8,11 @@ import {
 
 export class HlsAdapter extends BaseCloudService {
   readonly name = "HLS";
+  readonly description =
+    "HLS 動画ストリーム（.m3u8 マニフェスト）。ffmpeg で音声を抽出。";
+  readonly urlExamples = [
+    "https://example.com/path/to/playlist.m3u8",
+  ];
 
   isValidUrl(url: string): boolean {
     return isHlsUrl(url);

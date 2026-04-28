@@ -25,6 +25,18 @@ export interface CloudService {
   readonly name: string;
 
   /**
+   * One-line human description shown in `scribe --help` and `scribe list-sources`.
+   * Optional — adapters that don't set this won't appear in the docs section.
+   */
+  readonly description?: string;
+
+  /**
+   * Example URLs accepted by this service (1〜3 件)。
+   * Optional — purely for documentation in --help / list-sources.
+   */
+  readonly urlExamples?: readonly string[];
+
+  /**
    * Check if URL belongs to this service
    */
   isValidUrl(url: string): boolean;
@@ -108,7 +120,6 @@ export class CloudServiceRegistry {
    */
   register(service: CloudService): void {
     this.services.set(service.name.toLowerCase(), service);
-    console.log(`Registered cloud service: ${service.name}`);
   }
 
   /**

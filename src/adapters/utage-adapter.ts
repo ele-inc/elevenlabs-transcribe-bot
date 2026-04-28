@@ -7,6 +7,11 @@ import {
 
 export class UtageAdapter extends BaseCloudService {
   readonly name = "Utage";
+  readonly description =
+    "Utage 配信プラットフォームの動画。ページから埋め込み動画を抽出してダウンロード。";
+  readonly urlExamples = [
+    "https://<your-tenant>.utage-system.com/video/<VIDEO_ID>",
+  ];
 
   isValidUrl(url: string): boolean {
     return isUtageUrl(url);

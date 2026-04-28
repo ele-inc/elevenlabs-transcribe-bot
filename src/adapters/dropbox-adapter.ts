@@ -12,6 +12,12 @@ import {
 
 export class DropboxAdapter extends BaseCloudService {
   readonly name = "Dropbox";
+  readonly description =
+    "Dropbox 共有リンク（ファイルまたはフォルダ）。dl=1 への自動変換に対応。";
+  readonly urlExamples = [
+    "https://www.dropbox.com/s/<HASH>/<FILE>?dl=0",
+    "https://www.dropbox.com/scl/fi/<HASH>/<FILE>?dl=0",
+  ];
 
   isValidUrl(url: string): boolean {
     return isDropboxUrl(url);

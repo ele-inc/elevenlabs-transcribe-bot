@@ -6,6 +6,7 @@ import { transcribeFile } from "./core/transcribe-core.ts";
 import { TranscriptionOptions } from "./core/types.ts";
 import { createTranscriptionHeader } from "./utils/utils.ts";
 import { cloudServiceManager } from "./services/cloud-service-manager.ts";
+import { cloudServiceRegistry } from "./services/cloud-service.ts";
 import { runInit } from "./init.ts";
 
 function userConfigEnvPath(): string {
@@ -140,6 +141,30 @@ function parseArgs(): { filePath: string; options: CliOptions } {
 }
 
 /**
+ * Build a "Supported sources" section by reading from the registry.
+ * Adapters that set `description` are listed; URL examples come from
+ * `urlExamples`. New adapters appear automatically without touching cli.ts.
+ */
+function buildSupportedSourcesSection(): string {
+  const services = cloudServiceRegistry.getAllServices()
+    .filter((s) => s.description);
+  if (services.length === 0) return "";
+
+  const lines = ["Supported URL sources:"];
+  for (const s of services) {
+    lines.push(`  ${s.name}`);
+    lines.push(`    ${s.description}`);
+    if (s.urlExamples?.length) {
+      for (const ex of s.urlExamples) {
+        lines.push(`    e.g. ${ex}`);
+      }
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+/**
  * Print help message
  */
 function printHelp(): void {
@@ -148,12 +173,15 @@ ElevenLabs Transcription CLI
 
 Usage: scribe [options] <file-or-url>
        scribe init
+       scribe list-sources
 
 Subcommands:
   init                 Interactively set API keys (saved to ~/.config/scribe/.env)
+  list-sources         Print supported URL sources and exit
 
 Arguments:
-  <file-or-url>        Path to audio/video file, or supported URL (Google Drive/Dropbox/YouTube)
+  <file-or-url>        Path to a local audio/video file, or a URL from one of
+                       the supported sources (run \`scribe list-sources\` to see all).
 
 Options:
   -h, --help           Show this help message
@@ -164,30 +192,44 @@ Options:
 
 Transcription Options:
   --no-diarize         Disable speaker identification (default: enabled)
-  --speaker-names <names>  Comma-separated speaker names (auto-sets speaker count)
+  --speaker-names <names>  Comma-separated speaker names (auto-sets speaker count).
+                           Names are matched to speaker_N labels via Gemini.
                            Example: --speaker-names "Alice,Bob,Charlie"
   --num-speakers <n>   Number of speakers (only used if --speaker-names not provided)
   --no-timestamp       Disable timestamps in output
   --no-audio-events    Disable audio event tagging
 
 Examples:
-  # Basic transcription to stdout
-  deno run --allow-all src/cli.ts audio.mp3
+  # Local file → transcripts/<name>_<timestamp>.txt
+  scribe meeting.mp4
 
-  # Save to file with speaker names
-  deno run --allow-all src/cli.ts -o transcript.txt --speaker-names "Alice,Bob" meeting.mp4
+  # Save to specific path with speaker names (Gemini maps speaker_N → real name)
+  scribe interview.mp4 --speaker-names "Alice,Bob" -o ./out.txt
 
-  # JSON output without timestamps
-  deno run --allow-all src/cli.ts -f json --no-timestamp audio.m4a
+  # Stdout (no file save), JSON, no timestamps
+  scribe audio.m4a --no-save -f json --no-timestamp
 
-  # Disable speaker diarization
-  deno run --allow-all src/cli.ts --no-diarize recording.wav
+  # Single speaker — disable diarization for cleaner output
+  scribe monologue.wav --no-diarize
 
-  # Transcribe from a supported URL (Dropbox / Google Drive / YouTube)
-  deno run --allow-all src/cli.ts "https://www.youtube.com/watch?v=xxxxxxx" --speaker-names "Alice,Bob"
+  # YouTube / Loom / Google Drive / Dropbox / Vimeo / Utage / HLS URL
+  scribe 'https://youtu.be/<VIDEO_ID>' --speaker-names "Host,Guest"
 
-Note: Video files (mp4, mkv, mov, etc.) will be automatically converted to audio before transcription.
+${buildSupportedSourcesSection()}Note: Video files (mp4, mkv, mov, etc.) are automatically converted to audio
+      before transcription via ffmpeg.
 `);
+}
+
+/**
+ * Print supported sources for `scribe list-sources`.
+ */
+function printSources(): void {
+  const section = buildSupportedSourcesSection();
+  if (section) {
+    console.log(section.trimEnd());
+  } else {
+    console.log("No URL sources are registered.");
+  }
 }
 
 /**
@@ -196,6 +238,11 @@ Note: Video files (mp4, mkv, mov, etc.) will be automatically converted to audio
 async function main() {
   if (Deno.args[0] === "init") {
     await runInit(userConfigEnvPath());
+    return;
+  }
+
+  if (Deno.args[0] === "list-sources") {
+    printSources();
     return;
   }
 

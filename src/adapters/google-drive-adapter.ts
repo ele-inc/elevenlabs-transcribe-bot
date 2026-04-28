@@ -12,6 +12,11 @@ import {
 
 export class GoogleDriveAdapter extends BaseCloudService {
   readonly name = "Google Drive";
+  readonly description =
+    "Google Drive 上の音声・動画ファイル。共有リンクが必要（最大 20GB）。";
+  readonly urlExamples = [
+    "https://drive.google.com/file/d/<FILE_ID>/view",
+  ];
 
   isValidUrl(url: string): boolean {
     return isGoogleDriveUrl(url);
