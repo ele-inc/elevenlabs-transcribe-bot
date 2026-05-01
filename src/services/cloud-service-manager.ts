@@ -3,7 +3,7 @@
  * Currently supports Google Drive, easily extensible for Dropbox, OneDrive, etc.
  */
 
-import { CloudService, CloudDownloadResult, cloudServiceRegistry } from "./cloud-service.ts";
+import { CloudDownloadOptions, CloudService, CloudDownloadResult, cloudServiceRegistry } from "./cloud-service.ts";
 import { GoogleDriveAdapter } from "../adapters/google-drive-adapter.ts";
 import { TempFileManager } from "./temp-file-manager.ts";
 import { DropboxAdapter } from "../adapters/dropbox-adapter.ts";
@@ -67,7 +67,7 @@ export class CloudServiceManager {
   /**
    * Download file from any supported cloud service
    */
-  async downloadFromUrl(url: string): Promise<CloudDownloadResult> {
+  async downloadFromUrl(url: string, opts?: CloudDownloadOptions): Promise<CloudDownloadResult> {
     const service = cloudServiceRegistry.getServiceForUrl(url);
 
     if (!service) {
@@ -87,7 +87,7 @@ export class CloudServiceManager {
 
     try {
       // Get metadata first to determine file extension
-      const metadata = await service.getFileMetadata(fileId);
+      const metadata = await service.getFileMetadata(fileId, opts);
 
       // Determine extension from metadata filename or mimeType
       let extension = "tmp";
@@ -108,7 +108,7 @@ export class CloudServiceManager {
       );
 
       // Download file
-      const downloaded = await service.downloadFile(fileId, tempPath);
+      const downloaded = await service.downloadFile(fileId, tempPath, opts);
 
       if (!downloaded) {
         // File was skipped (non-media)

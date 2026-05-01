@@ -21,6 +21,7 @@ function createTranscriptionModal(
   diarizeEnabled: boolean = true,
   currentValues?: {
     url?: string;
+    password?: string;
     numSpeakers?: string;
     speakerNames?: string;
     timestamp?: string;
@@ -49,6 +50,28 @@ function createTranscriptionModal(
       hint: {
         type: "plain_text",
         text: "対応: Google Drive, Dropbox, Loom, Vimeo, Utage（公開設定が必要）",
+      },
+    },
+    {
+      type: "input",
+      block_id: "password_block",
+      optional: true,
+      element: {
+        type: "plain_text_input",
+        action_id: "password_input",
+        placeholder: {
+          type: "plain_text",
+          text: "（任意）パスワードが必要な動画の場合のみ入力",
+        },
+        ...(currentValues?.password && { initial_value: currentValues.password }),
+      },
+      label: {
+        type: "plain_text",
+        text: "🔒 動画パスワード",
+      },
+      hint: {
+        type: "plain_text",
+        text: "現在パスワード保護に対応しているのは Vimeo のみです。",
       },
     },
     {
@@ -325,6 +348,7 @@ async function handleButtonClick(payload: {
 function parseModalValues(values: Record<string, Record<string, { value?: string; selected_option?: { value: string } }>>): {
   options: TranscriptionOptions;
   url: string | null;
+  password: string | null;
 } {
   const getSelectValue = (blockId: string, actionId: string): string | undefined => {
     return values[blockId]?.[actionId]?.selected_option?.value;
@@ -355,6 +379,7 @@ function parseModalValues(values: Record<string, Record<string, { value?: string
   }
 
   const url = getInputValue("url_block", "url_input") || null;
+  const password = getInputValue("password_block", "password_input")?.trim() || null;
 
   return {
     options: {
@@ -366,6 +391,7 @@ function parseModalValues(values: Record<string, Record<string, { value?: string
       summarize,
     },
     url,
+    password,
   };
 }
 
@@ -382,7 +408,7 @@ async function handleModalSubmission(payload: {
   user: { id: string };
 }) {
   const { channelId, threadTs } = JSON.parse(payload.view.private_metadata);
-  const { options, url } = parseModalValues(payload.view.state.values);
+  const { options, url, password } = parseModalValues(payload.view.state.values);
 
   if (!url) {
     await sendSlackMessage(
@@ -417,7 +443,7 @@ async function handleModalSubmission(payload: {
   });
 
   // Process in background
-  processor.processTextInput(url, options)
+  processor.processTextInput(url, options, password ? { password } : undefined)
     .catch(console.error)
     .finally(() => processor.cleanup());
 }
@@ -454,6 +480,7 @@ export async function handleSlackInteractions(req: Request): Promise<Response> {
       // Extract current values to preserve them
       const currentValues = {
         url: values.url_block?.url_input?.value,
+        password: values.password_block?.password_input?.value,
         numSpeakers: values.num_speakers_block?.num_speakers_select?.selected_option?.value,
         speakerNames: values.speaker_names_block?.speaker_names_input?.value,
         timestamp: values.timestamp_block?.timestamp_select?.selected_option?.value,

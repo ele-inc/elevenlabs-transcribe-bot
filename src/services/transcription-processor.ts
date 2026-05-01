@@ -44,6 +44,7 @@ export class TranscriptionProcessor {
   async processTextInput(
     text: string,
     options: TranscriptionOptions,
+    downloadOpts?: { password?: string },
   ): Promise<void> {
     const { cloudUrls } = extractMediaInfo(text);
 
@@ -68,7 +69,7 @@ export class TranscriptionProcessor {
       }
 
       try {
-        const metadata = await service.getFileMetadata(fileId);
+        const metadata = await service.getFileMetadata(fileId, downloadOpts);
         if (service.isMediaFile(metadata.mimeType)) {
           mediaUrls.push(url);
         } else {
@@ -106,7 +107,7 @@ export class TranscriptionProcessor {
 
     // Process only media file URLs
     for (const url of mediaUrls) {
-      await this.processCloudUrl(url, options);
+      await this.processCloudUrl(url, options, downloadOpts);
     }
   }
 
@@ -116,6 +117,7 @@ export class TranscriptionProcessor {
   async processCloudUrl(
     url: string,
     options: TranscriptionOptions,
+    downloadOpts?: { password?: string },
   ): Promise<void> {
     try {
       // Get metadata first to send status message with filename
@@ -135,7 +137,7 @@ export class TranscriptionProcessor {
       }
 
       // Get metadata first to check if it's a media file
-      const metadata = await service.getFileMetadata(fileId);
+      const metadata = await service.getFileMetadata(fileId, downloadOpts);
 
       // Check if file is a media file before sending status message
       if (!service.isMediaFile(metadata.mimeType)) {
@@ -155,6 +157,7 @@ export class TranscriptionProcessor {
         userId: this.context.userId,
         transcriptionOptions: options,
         adapter: this.adapter,
+        password: downloadOpts?.password,
       });
 
       if (!result.success) {

@@ -163,6 +163,10 @@ function getProxyArgs(): string[] {
   return config.youtubeProxy ? ["--proxy", config.youtubeProxy] : [];
 }
 
+function getPasswordArgs(password?: string): string[] {
+  return password ? ["--video-password", password] : [];
+}
+
 // Errors that typically resolve on retry (bot detection on the proxy IP,
 // transient rate limits). Permanent errors like "Video unavailable" or
 // "Private video" are not listed — retrying those wastes time and bandwidth.
@@ -265,6 +269,7 @@ export function extractYouTubeVideoId(url: string): string | null {
 
 export async function getYouTubeFileMetadata(
   videoId: string,
+  opts?: { password?: string },
 ): Promise<CloudFileMetadata> {
   await ensureYtDlpAvailable();
   const url = createYouTubeWatchUrl(videoId);
@@ -273,6 +278,7 @@ export async function getYouTubeFileMetadata(
   const cookiesInfo = await createCookiesFileIfNeeded();
   const cookieArgs = getCookieArgs(cookiesInfo.path);
   const proxyArgs = getProxyArgs();
+  const passwordArgs = getPasswordArgs(opts?.password);
 
   try {
     const { success, stdout, stderr } = await runYtDlp([
@@ -281,6 +287,7 @@ export async function getYouTubeFileMetadata(
       "--no-warnings",
       ...cookieArgs,
       ...proxyArgs,
+      ...passwordArgs,
       url,
     ]);
 
@@ -339,6 +346,7 @@ export async function getYouTubeFileMetadata(
 export async function downloadYouTubeAudioToPath(
   videoId: string,
   outputPath: string,
+  opts?: { password?: string },
 ): Promise<void> {
   await ensureYtDlpAvailable();
   const url = createYouTubeWatchUrl(videoId);
@@ -347,6 +355,7 @@ export async function downloadYouTubeAudioToPath(
   const cookiesInfo = await createCookiesFileIfNeeded();
   const cookieArgs = getCookieArgs(cookiesInfo.path);
   const proxyArgs = getProxyArgs();
+  const passwordArgs = getPasswordArgs(opts?.password);
 
   try {
     // Try multiple format selection strategies for better compatibility
@@ -363,6 +372,7 @@ export async function downloadYouTubeAudioToPath(
       "--ignore-errors", // Continue even if some formats fail
       ...cookieArgs,
       ...proxyArgs,
+      ...passwordArgs,
       "-o",
       outputPath,
       url,

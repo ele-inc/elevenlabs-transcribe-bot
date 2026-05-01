@@ -11,6 +11,10 @@ export interface CloudFileMetadata {
   duration?: number;
 }
 
+export interface CloudDownloadOptions {
+  password?: string;
+}
+
 export interface CloudDownloadResult {
   success: boolean;
   metadata?: CloudFileMetadata;
@@ -49,12 +53,12 @@ export interface CloudService {
   /**
    * Get file metadata
    */
-  getFileMetadata(fileId: string): Promise<CloudFileMetadata>;
+  getFileMetadata(fileId: string, opts?: CloudDownloadOptions): Promise<CloudFileMetadata>;
 
   /**
    * Download file to temporary path
    */
-  downloadFile(fileId: string, tempPath: string): Promise<boolean>;
+  downloadFile(fileId: string, tempPath: string, opts?: CloudDownloadOptions): Promise<boolean>;
 
   /**
    * Check if file is a media file that should be transcribed
@@ -74,8 +78,8 @@ export abstract class BaseCloudService implements CloudService {
   abstract readonly name: string;
   abstract isValidUrl(url: string): boolean;
   abstract extractFileId(url: string): string | null;
-  abstract getFileMetadata(fileId: string): Promise<CloudFileMetadata>;
-  abstract downloadFile(fileId: string, tempPath: string): Promise<boolean>;
+  abstract getFileMetadata(fileId: string, opts?: CloudDownloadOptions): Promise<CloudFileMetadata>;
+  abstract downloadFile(fileId: string, tempPath: string, opts?: CloudDownloadOptions): Promise<boolean>;
 
   /**
    * Common media file check

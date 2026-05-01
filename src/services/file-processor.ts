@@ -53,11 +53,12 @@ export async function processCloudFile(
     userId: string;
     transcriptionOptions: TranscriptionOptions;
     adapter: PlatformAdapter;
+    password?: string;
   }
 ): Promise<ProcessingResult> {
   let tempPath: string | undefined;
   try {
-    const result = await cloudServiceManager.downloadFromUrl(url);
+    const result = await cloudServiceManager.downloadFromUrl(url, { password: options.password });
     tempPath = result.tempPath;
 
     if (!result.success) {
