@@ -16,6 +16,7 @@ import { getFileExtensionFromMime } from "../utils/utils.ts";
 import { cloudServiceManager } from "./cloud-service-manager.ts";
 import { cloudServiceRegistry } from "./cloud-service.ts";
 import { getErrorMessage } from "../utils/errors.ts";
+import { acquireSlot, activeCount, isAtCapacity } from "./concurrency-limiter.ts";
 
 export interface FileAttachment {
   url: string;
@@ -105,9 +106,19 @@ export class TranscriptionProcessor {
       return;
     }
 
-    // Process only media file URLs
+    // Process only media file URLs (concurrency-limited)
     for (const url of mediaUrls) {
-      await this.processCloudUrl(url, options, downloadOpts);
+      if (isAtCapacity()) {
+        await this.adapter.sendStatusMessage(
+          `🕐 現在 ${activeCount()} 件処理中のため順番待ちです...`,
+        );
+      }
+      const release = await acquireSlot();
+      try {
+        await this.processCloudUrl(url, options, downloadOpts);
+      } finally {
+        release();
+      }
     }
   }
 
@@ -200,7 +211,17 @@ export class TranscriptionProcessor {
         continue;
       }
 
-      await this.processAttachment(attachment, options);
+      if (isAtCapacity()) {
+        await this.adapter.sendStatusMessage(
+          `🕐 現在 ${activeCount()} 件処理中のため順番待ちです...`,
+        );
+      }
+      const release = await acquireSlot();
+      try {
+        await this.processAttachment(attachment, options);
+      } finally {
+        release();
+      }
     }
   }
 
