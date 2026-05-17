@@ -69,7 +69,6 @@ export async function transcribeCore(
     model_id: "scribe_v2",
     tag_audio_events: options.tagAudioEvents,
     diarize: options.diarize,
-    language_code: "ja",
     ...(options.diarize && options.numSpeakers ? { num_speakers: options.numSpeakers } : {}),
   }, { timeoutInSeconds: 3600 });
 
