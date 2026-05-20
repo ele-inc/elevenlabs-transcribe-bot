@@ -163,7 +163,7 @@ function handleMessageCommand(
 
   // Check for attachments
   const audioVideoAttachments = message.attachments?.filter(attachment =>
-    isValidAudioVideoFile(attachment.content_type)
+    isValidAudioVideoFile(attachment.content_type, attachment.filename)
   );
 
   // Check for cloud URLs in message content

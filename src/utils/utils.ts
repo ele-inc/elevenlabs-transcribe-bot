@@ -50,24 +50,92 @@ export const parseTranscriptionOptions = (
   };
 };
 
+const mimeToExt: Record<string, string> = {
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/wav": "wav",
+  "audio/wave": "wav",
+  "audio/x-wav": "wav",
+  "audio/mp4": "m4a",
+  "audio/m4a": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/aac": "aac",
+  "audio/ogg": "ogg",
+  "application/ogg": "ogg",
+  "audio/webm": "webm",
+  "video/mp4": "mp4",
+  "video/mpeg": "mpg",
+  "video/quicktime": "mov",
+  "video/x-msvideo": "avi",
+  "video/webm": "webm",
+};
+
+const extToMime: Record<string, string> = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  ogg: "audio/ogg",
+  flac: "audio/flac",
+  webm: "video/webm",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  avi: "video/x-msvideo",
+  mpg: "video/mpeg",
+  mpeg: "video/mpeg",
+  mkv: "video/x-matroska",
+};
+
+const mimeAliases: Record<string, string> = {
+  "audio/mp3": "audio/mpeg",
+  "audio/wave": "audio/wav",
+  "audio/x-wav": "audio/wav",
+  "audio/m4a": "audio/mp4",
+  "audio/x-m4a": "audio/mp4",
+  "application/ogg": "audio/ogg",
+};
+
+export const normalizeMimeType = (mimeType?: string): string | undefined => {
+  const normalized = mimeType?.split(";")[0]?.trim().toLowerCase();
+  return normalized ? mimeAliases[normalized] || normalized : undefined;
+};
+
+export const getFileExtensionFromFilename = (
+  filename?: string,
+): string | undefined => {
+  const name = filename?.split(/[?#]/)[0]?.trim().toLowerCase();
+  const match = name?.match(/\.([a-z0-9]+)$/);
+  return match?.[1];
+};
+
+export const getMimeTypeFromFilename = (
+  filename?: string,
+): string | undefined => {
+  const extension = getFileExtensionFromFilename(filename);
+  return extension ? extToMime[extension] : undefined;
+};
+
+export const isAudioVideoMimeType = (mimeType?: string): boolean => {
+  const normalized = normalizeMimeType(mimeType);
+  return !!normalized &&
+    (normalized.startsWith("audio/") || normalized.startsWith("video/") ||
+      normalized === "application/ogg");
+};
+
+export const resolveMediaMimeType = (
+  mimeType?: string,
+  filename?: string,
+): string | undefined => {
+  const normalized = normalizeMimeType(mimeType);
+  if (isAudioVideoMimeType(normalized)) {
+    return normalized;
+  }
+  return getMimeTypeFromFilename(filename) || normalized;
+};
+
 export const getFileExtensionFromMime = (mimeType: string): string => {
-  const mimeToExt: Record<string, string> = {
-    "audio/mpeg": "mp3",
-    "audio/mp3": "mp3",
-    "audio/wav": "wav",
-    "audio/wave": "wav",
-    "audio/x-wav": "wav",
-    "audio/mp4": "m4a",
-    "audio/aac": "aac",
-    "audio/ogg": "ogg",
-    "audio/webm": "webm",
-    "video/mp4": "mp4",
-    "video/mpeg": "mpg",
-    "video/quicktime": "mov",
-    "video/x-msvideo": "avi",
-    "video/webm": "webm",
-  };
-  return mimeToExt[mimeType] || mimeType.split("/")[1] || "bin";
+  const normalized = normalizeMimeType(mimeType) || "";
+  return mimeToExt[normalized] || normalized.split("/")[1] || "bin";
 };
 
 export const formatTimestamp = (seconds: number): string => {
