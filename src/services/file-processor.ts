@@ -4,6 +4,7 @@ import { transcribeAudioFile } from "../core/scribe.ts";
 import { cloudServiceManager } from "./cloud-service-manager.ts";
 import { PlatformAdapter } from "../adapters/platform-adapter.ts";
 import { getErrorMessage } from "../utils/errors.ts";
+import { isAudioVideoMimeType, resolveMediaMimeType } from "../utils/utils.ts";
 
 export interface FileInfo {
   filename: string;
@@ -40,9 +41,11 @@ export function formatOptionsText(options: TranscriptionOptions): string {
   return optionInfo.length > 0 ? ` (${optionInfo.join(", ")})` : "";
 }
 
-export function isValidAudioVideoFile(mimeType: string | undefined): boolean {
-  if (!mimeType) return false;
-  return mimeType.startsWith("audio/") || mimeType.startsWith("video/");
+export function isValidAudioVideoFile(
+  mimeType: string | undefined,
+  filename?: string,
+): boolean {
+  return isAudioVideoMimeType(resolveMediaMimeType(mimeType, filename));
 }
 
 export async function processCloudFile(
@@ -69,9 +72,14 @@ export async function processCloudFile(
       return { success: false, error: "Failed to get file metadata" };
     }
 
+    const fileType = resolveMediaMimeType(
+      result.metadata.mimeType,
+      result.metadata.filename,
+    ) || result.metadata.mimeType;
+
     await transcribeAudioFile({
       fileURL: `file://${result.tempPath}`,
-      fileType: result.metadata.mimeType,
+      fileType,
       duration: 0,
       channelId: options.channelId,
       timestamp: options.timestamp,

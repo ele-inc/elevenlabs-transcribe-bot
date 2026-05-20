@@ -12,7 +12,7 @@ import {
   processCloudFile,
 } from "./file-processor.ts";
 import { PlatformAdapter } from "../adapters/platform-adapter.ts";
-import { getFileExtensionFromMime } from "../utils/utils.ts";
+import { getFileExtensionFromMime, resolveMediaMimeType } from "../utils/utils.ts";
 import { cloudServiceManager } from "./cloud-service-manager.ts";
 import { cloudServiceRegistry } from "./cloud-service.ts";
 import { getErrorMessage } from "../utils/errors.ts";
@@ -215,7 +215,7 @@ export class TranscriptionProcessor {
     options: TranscriptionOptions,
   ): Promise<void> {
     for (const attachment of attachments) {
-      if (!isValidAudioVideoFile(attachment.mimeType)) {
+      if (!isValidAudioVideoFile(attachment.mimeType, attachment.filename)) {
         await this.adapter.sendStatusMessage(
           `ファイル "${attachment.filename}" は音声または動画ファイルではありません。`,
         );
@@ -263,7 +263,11 @@ export class TranscriptionProcessor {
       );
 
       // Download file using platform adapter
-      const extension = getFileExtensionFromMime(attachment.mimeType || "");
+      const fileType = resolveMediaMimeType(
+        attachment.mimeType,
+        attachment.filename,
+      ) || "";
+      const extension = getFileExtensionFromMime(fileType);
       tempPath = await this.tempManager.createTempFile("audio", extension);
       await this.adapter.downloadFile(attachment.url, tempPath);
 
@@ -271,7 +275,7 @@ export class TranscriptionProcessor {
       const fileURL = `file://${tempPath}`;
       await transcribeAudioFile({
         fileURL,
-        fileType: attachment.mimeType || "",
+        fileType,
         duration: attachment.duration || 0,
         channelId: this.context.channelId,
         timestamp: this.context.timestamp,
