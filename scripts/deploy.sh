@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT_ID="automatic-recording-of-minutes"
 REGION="asia-northeast1"
 SERVICE="scribe-bot"
+MAX_CONCURRENT_TRANSCRIPTIONS="8"
 
 SECRETS=(
   ELEVENLABS_API_KEY
@@ -50,8 +51,9 @@ gcloud run deploy "$SERVICE" \
   --project="$PROJECT_ID" \
   --source=. \
   --region="$REGION" \
-  --memory=16Gi \
-  --cpu=4 \
+  --memory=32Gi \
+  --cpu=8 \
+  --concurrency=8 \
   --timeout=3600 \
   --no-allow-unauthenticated \
   --execution-environment=gen2 \
@@ -61,6 +63,7 @@ gcloud run deploy "$SERVICE" \
   --max-instances=1 \
   --port=8080 \
   --clear-env-vars \
+  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS" \
   --set-secrets="$mapping"
 
 echo "✅ Deployed"

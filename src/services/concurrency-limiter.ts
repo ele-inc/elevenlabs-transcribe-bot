@@ -7,7 +7,12 @@
  * 既存ジョブの完了を最大 SHUTDOWN_GRACE_MS 待つ。
  */
 
-const MAX_CONCURRENT_TRANSCRIPTIONS = 3;
+import config from "../core/config.ts";
+
+const MAX_CONCURRENT_TRANSCRIPTIONS = Math.max(
+  1,
+  config.maxConcurrentTranscriptions,
+);
 const SHUTDOWN_GRACE_MS = 9 * 60 * 1000; // 9分。Cloud Run の SIGKILL までに余裕を残す。
 const SHUTDOWN_POLL_MS = 500;
 

@@ -28,12 +28,15 @@ steps:
         done
         mapping="$${mapping%,}"
 
+        RUNTIME_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8"
+
         gcloud run deploy scribe-bot \
           --project="$PROJECT_ID" \
           --source=. \
           --region=asia-northeast1 \
-          --memory=24Gi \
-          --cpu=6 \
+          --memory=32Gi \
+          --cpu=8 \
+          --concurrency=8 \
           --timeout=3600 \
           --no-allow-unauthenticated \
           --execution-environment=gen2 \
@@ -43,6 +46,7 @@ steps:
           --max-instances=1 \
           --port=8080 \
           --clear-env-vars \
+          --set-env-vars="$${RUNTIME_ENV}" \
           --set-secrets="$${mapping}"
 
 options:

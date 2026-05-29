@@ -6,6 +6,7 @@
 interface Config {
   // Server
   port: number;
+  maxConcurrentTranscriptions: number;
 
   // Slack
   slackBotToken: string;
@@ -41,11 +42,21 @@ function getOptionalEnv(key: string): string | undefined {
   return Deno.env.get(key);
 }
 
+function getIntegerEnv(key: string, defaultValue: number): number {
+  const value = Deno.env.get(key);
+  if (!value) return defaultValue;
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+}
+
 // Use getters so env vars are validated only when accessed.
 // Required for the CLI binary, which doesn't need Slack/Discord tokens
 // but still imports modules that reference `config`.
 export const config: Config = {
   get port() { return parseInt(Deno.env.get("PORT") || "8080"); },
+  get maxConcurrentTranscriptions() {
+    return getIntegerEnv("MAX_CONCURRENT_TRANSCRIPTIONS", 3);
+  },
 
   get slackBotToken() { return getEnvOrThrow("SLACK_BOT_TOKEN"); },
 
