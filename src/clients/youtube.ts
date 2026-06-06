@@ -1,4 +1,4 @@
-import { dirname, join } from "@std/path";
+import { basename, dirname, extname, join } from "@std/path";
 import { CloudFileMetadata } from "../services/cloud-service.ts";
 import { config } from "../core/config.ts";
 import { TempFileManager } from "../services/temp-file-manager.ts";
@@ -218,14 +218,17 @@ export function isYouTubeUrl(url: string): boolean {
     const hostname = parsed.hostname.toLowerCase();
     // Support YouTube and other yt-dlp compatible sites like Loom, Vimeo
     // Exclude Vimeo review URLs (/reviews/{uuid}/videos/{id}) - handled by VimeoReviewAdapter
-    if (hostname.includes("vimeo.com") && /\/reviews\/[^/]+\/videos\/\d+/.test(parsed.pathname)) {
+    if (
+      hostname.includes("vimeo.com") &&
+      /\/reviews\/[^/]+\/videos\/\d+/.test(parsed.pathname)
+    ) {
       return false;
     }
     return hostname.includes("youtube.com") ||
-           hostname === "youtu.be" ||
-           hostname.endsWith("youtube-nocookie.com") ||
-           hostname.includes("loom.com") ||
-           hostname.includes("vimeo.com");
+      hostname === "youtu.be" ||
+      hostname.endsWith("youtube-nocookie.com") ||
+      hostname.includes("loom.com") ||
+      hostname.includes("vimeo.com");
   } catch {
     return false;
   }
@@ -451,6 +454,166 @@ export async function downloadYouTubeAudioToPath(
     );
   } finally {
     // Clean up temporary cookies file if we created one
+    if (cookiesInfo.isTemporary && cookiesInfo.path) {
+      try {
+        await tempManager.cleanupFileAndDir(cookiesInfo.path);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  }
+}
+
+export async function getYouTubeVideoMetadata(
+  videoId: string,
+  opts?: { password?: string },
+): Promise<CloudFileMetadata> {
+  const metadata = await getYouTubeFileMetadata(videoId, opts);
+  const baseName = metadata.filename.replace(/\.[^/.]+$/, "") || metadata.id;
+
+  return {
+    ...metadata,
+    filename: `${baseName}.mp4`,
+    mimeType: "video/mp4",
+  };
+}
+
+const VIDEO_EXTENSIONS = new Set([
+  ".mp4",
+  ".m4v",
+  ".mov",
+  ".mkv",
+  ".webm",
+]);
+
+async function findYtDlpOutput(
+  outputDir: string,
+  filenamePrefix: string,
+): Promise<string | null> {
+  let bestMatch: { path: string; mtime: number; size: number } | null = null;
+
+  for await (const entry of Deno.readDir(outputDir)) {
+    if (!entry.isFile || !entry.name.startsWith(filenamePrefix)) {
+      continue;
+    }
+
+    const extension = extname(entry.name).toLowerCase();
+    if (!VIDEO_EXTENSIONS.has(extension)) {
+      continue;
+    }
+
+    const fullPath = join(outputDir, entry.name);
+    const stat = await Deno.stat(fullPath);
+    if (stat.size <= 0) {
+      continue;
+    }
+
+    const mtime = stat.mtime?.getTime() ?? 0;
+    if (
+      !bestMatch ||
+      mtime > bestMatch.mtime ||
+      (mtime === bestMatch.mtime && stat.size > bestMatch.size)
+    ) {
+      bestMatch = { path: fullPath, mtime, size: stat.size };
+    }
+  }
+
+  return bestMatch?.path ?? null;
+}
+
+async function cleanupYtDlpOutputs(
+  outputDir: string,
+  filenamePrefix: string,
+  keepPath?: string,
+): Promise<void> {
+  for await (const entry of Deno.readDir(outputDir)) {
+    if (!entry.isFile || !entry.name.startsWith(filenamePrefix)) {
+      continue;
+    }
+
+    const fullPath = join(outputDir, entry.name);
+    if (keepPath && fullPath === keepPath) {
+      continue;
+    }
+
+    await Deno.remove(fullPath).catch(() => {});
+  }
+}
+
+export async function downloadYouTubeVideoToPath(
+  videoId: string,
+  outputPath: string,
+  opts?: { password?: string },
+): Promise<void> {
+  await ensureYtDlpAvailable();
+  const url = createYouTubeWatchUrl(videoId);
+
+  const outputDir = dirname(outputPath);
+  await Deno.mkdir(outputDir, { recursive: true });
+
+  const outputStem = basename(outputPath).replace(/\.[^/.]+$/, "") || "video";
+  const tempPrefix = `${outputStem}.${crypto.randomUUID()}`;
+  const outputTemplate = join(outputDir, `${tempPrefix}.%(ext)s`);
+
+  const cookiesInfo = await createCookiesFileIfNeeded();
+  const cookieArgs = getCookieArgs(cookiesInfo.path);
+  const proxyArgs = getProxyArgs();
+  const passwordArgs = getPasswordArgs(opts?.password);
+  let downloadedPath: string | null = null;
+
+  try {
+    const args = [
+      "-f",
+      "b[ext=mp4][protocol^=http]/bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
+      "--merge-output-format",
+      "mp4",
+      "--remux-video",
+      "mp4",
+      "--no-playlist",
+      "--concurrent-fragments",
+      "8",
+      "--newline",
+      "--progress",
+      ...cookieArgs,
+      ...proxyArgs,
+      ...passwordArgs,
+      "-o",
+      outputTemplate,
+      url,
+    ];
+
+    const command = new Deno.Command("yt-dlp", {
+      args,
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    const { success } = await command.spawn().status;
+
+    downloadedPath = await findYtDlpOutput(outputDir, `${tempPrefix}.`);
+
+    if (downloadedPath) {
+      await Deno.remove(outputPath).catch(() => {});
+      await Deno.rename(downloadedPath, outputPath);
+      downloadedPath = outputPath;
+      return;
+    }
+
+    if (!success) {
+      throw new Error(
+        "Failed to download video from YouTube/Loom/Vimeo. See yt-dlp output above.",
+      );
+    }
+
+    throw new Error(
+      "YouTube/Loom/Vimeo video download completed but output file was not found",
+    );
+  } finally {
+    await cleanupYtDlpOutputs(
+      outputDir,
+      `${tempPrefix}.`,
+      downloadedPath ?? undefined,
+    );
+
     if (cookiesInfo.isTemporary && cookiesInfo.path) {
       try {
         await tempManager.cleanupFileAndDir(cookiesInfo.path);

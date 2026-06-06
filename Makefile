@@ -73,6 +73,21 @@ transcribe:
 	set -a && source .env && set +a && \
 	deno run --allow-all src/cli.ts "$(FILE)" $(ARGS)
 
+# Local video download
+download-video:
+	@if [ -z "$(URL)" ]; then \
+		echo "Error: URL parameter is required"; \
+		echo "Usage: make download-video URL=<url> [ARGS='--output video.mp4']"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make download-video URL='https://example.utage-system.com/video/xxxxx'"; \
+		echo "  make download-video URL='https://vimeo.com/xxxxx' ARGS='--password secret -o video.mp4'"; \
+		echo "  make download-video URL='https://example.com/video.m3u8' ARGS='--dir downloads'"; \
+		exit 1; \
+	fi
+	@export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$$PATH" && \
+	deno run --allow-all --config src/deno.json scripts/download-video.ts "$(URL)" $(ARGS)
+
 # Replace speaker labels in transcript
 replace-speakers:
 	@if [ -z "$(FILE)" ] || [ -z "$(SPEAKERS)" ]; then \
@@ -121,6 +136,8 @@ help:
 	@echo "  make logs            - Show recent Cloud Run logs"
 	@echo "  make transcribe      - Transcribe audio/video files locally (Mac環境)"
 	@echo "                        Usage: make transcribe FILE=<file-or-url> [ARGS='options']"
+	@echo "  make download-video - Download video from supported URLs locally"
+	@echo "                        Usage: make download-video URL=<url> [ARGS='options']"
 	@echo "  make docker-transcribe - Transcribe in Docker (Cloud Run同等環境)"
 	@echo "                        Usage: make docker-transcribe FILE=<file-or-url> [ARGS='options']"
 	@echo "  make replace-speakers - Replace speaker labels with names using AI"

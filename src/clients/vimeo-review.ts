@@ -1,4 +1,5 @@
 import { CloudFileMetadata } from "../services/cloud-service.ts";
+import { downloadHlsVideoToPath } from "./hls.ts";
 
 const decoder = new TextDecoder();
 
@@ -97,7 +98,11 @@ async function fetchPlayerConfig(
   // Return cached config if available and fresh
   const cached = playerConfigCache.get(reviewUrl);
   if (cached && (Date.now() - cached.cachedAt) < CONFIG_CACHE_TTL_MS) {
-    return { title: cached.title, duration: cached.duration, hlsUrl: cached.hlsUrl };
+    return {
+      title: cached.title,
+      duration: cached.duration,
+      hlsUrl: cached.hlsUrl,
+    };
   }
   // Step 1: Fetch the review page HTML
   const pageResponse = await fetch(reviewUrl);
@@ -157,7 +162,12 @@ async function fetchPlayerConfig(
   }
 
   // Cache the result
-  playerConfigCache.set(reviewUrl, { title, duration, hlsUrl, cachedAt: Date.now() });
+  playerConfigCache.set(reviewUrl, {
+    title,
+    duration,
+    hlsUrl,
+    cachedAt: Date.now(),
+  });
 
   return { title, duration, hlsUrl };
 }
@@ -183,6 +193,21 @@ export async function getVimeoReviewFileMetadata(
     id: reviewUrl,
     filename,
     mimeType: "audio/mpeg",
+    duration,
+  };
+}
+
+export async function getVimeoReviewVideoMetadata(
+  reviewUrl: string,
+): Promise<CloudFileMetadata> {
+  const { title, duration } = await fetchPlayerConfig(reviewUrl);
+  const sanitizedTitle = sanitizeFilename(title) || "vimeo_review_video";
+  const filename = `${sanitizedTitle}.mp4`;
+
+  return {
+    id: reviewUrl,
+    filename,
+    mimeType: "video/mp4",
     duration,
   };
 }
@@ -235,12 +260,16 @@ export async function downloadVimeoReviewAudioToPath(
   try {
     const stat = await Deno.stat(outputPath);
     if (!stat.isFile || stat.size === 0) {
-      console.error("[VimeoReview] Output file missing or empty after successful ffmpeg");
+      console.error(
+        "[VimeoReview] Output file missing or empty after successful ffmpeg",
+      );
       console.error("[VimeoReview] ffmpeg stderr:", stderrText);
       throw new Error("Output file is empty after ffmpeg conversion");
     }
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Output file is empty")) {
+    if (
+      error instanceof Error && error.message.includes("Output file is empty")
+    ) {
       throw error;
     }
     console.error("[VimeoReview] stat failed for:", outputPath);
@@ -250,5 +279,20 @@ export async function downloadVimeoReviewAudioToPath(
         error instanceof Error ? error.message : String(error)
       }`,
     );
+  }
+}
+
+/**
+ * Download video from a Vimeo Review page as MP4.
+ */
+export async function downloadVimeoReviewVideoToPath(
+  reviewUrl: string,
+  outputPath: string,
+): Promise<void> {
+  const { hlsUrl } = await fetchPlayerConfig(reviewUrl);
+  try {
+    await downloadHlsVideoToPath(hlsUrl, outputPath);
+  } finally {
+    clearConfigCache(reviewUrl);
   }
 }

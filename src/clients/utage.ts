@@ -1,4 +1,5 @@
 import { CloudFileMetadata } from "../services/cloud-service.ts";
+import { downloadHlsVideoToPath } from "./hls.ts";
 
 const decoder = new TextDecoder();
 
@@ -9,7 +10,8 @@ export function isUtageUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
-    return hostname.includes("utage-system.com") && parsed.pathname.includes("/video/");
+    return hostname.includes("utage-system.com") &&
+      parsed.pathname.includes("/video/");
   } catch {
     return false;
   }
@@ -56,7 +58,7 @@ async function extractM3u8Url(videoUrl: string): Promise<string> {
     throw new Error(
       `Failed to extract m3u8 URL from Utage: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
     );
   }
 }
@@ -99,7 +101,9 @@ function sanitizeFilename(filename: string): string {
 /**
  * Get metadata for Utage video
  */
-export async function getUtageFileMetadata(videoUrl: string): Promise<CloudFileMetadata> {
+export async function getUtageFileMetadata(
+  videoUrl: string,
+): Promise<CloudFileMetadata> {
   const title = await extractTitle(videoUrl);
   const sanitizedTitle = sanitizeFilename(title);
   const filename = `${sanitizedTitle}.mp3`;
@@ -108,6 +112,20 @@ export async function getUtageFileMetadata(videoUrl: string): Promise<CloudFileM
     id: videoUrl,
     filename,
     mimeType: "audio/mpeg",
+  };
+}
+
+export async function getUtageVideoMetadata(
+  videoUrl: string,
+): Promise<CloudFileMetadata> {
+  const title = await extractTitle(videoUrl);
+  const sanitizedTitle = sanitizeFilename(title) || "utage_video";
+  const filename = `${sanitizedTitle}.mp4`;
+
+  return {
+    id: videoUrl,
+    filename,
+    mimeType: "video/mp4",
   };
 }
 
@@ -142,12 +160,15 @@ export async function downloadUtageAudioToPath(
     throw new Error(
       `ffmpeg is not installed or not accessible. ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
     );
   }
 
   // Download and convert using ffmpeg
-  console.log("[Utage] downloadUtageAudioToPath: starting ffmpeg with m3u8:", m3u8Url);
+  console.log(
+    "[Utage] downloadUtageAudioToPath: starting ffmpeg with m3u8:",
+    m3u8Url,
+  );
   const command = new Deno.Command("ffmpeg", {
     args: [
       "-hide_banner",
@@ -172,12 +193,17 @@ export async function downloadUtageAudioToPath(
   const { success, stdout, stderr } = await command.output();
   const stdoutText = decoder.decode(stdout).trim();
   const stderrText = decoder.decode(stderr).trim();
-  console.log("[Utage] downloadUtageAudioToPath: ffmpeg completed, success:", success);
+  console.log(
+    "[Utage] downloadUtageAudioToPath: ffmpeg completed, success:",
+    success,
+  );
   console.log("[Utage] ffmpeg stdout:", stdoutText.slice(0, 500));
   console.log("[Utage] ffmpeg stderr:", stderrText.slice(0, 500));
   if (!success) {
     throw new Error(
-      `Failed to download Utage audio: ${stderrText || stdoutText || "Unknown error"}`,
+      `Failed to download Utage audio: ${
+        stderrText || stdoutText || "Unknown error"
+      }`,
     );
   }
 
@@ -194,4 +220,17 @@ export async function downloadUtageAudioToPath(
       }`,
     );
   }
+}
+
+/**
+ * Download Utage video as MP4.
+ */
+export async function downloadUtageVideoToPath(
+  videoUrl: string,
+  outputPath: string,
+): Promise<void> {
+  console.log("[Utage] downloadUtageVideoToPath: start", videoUrl);
+  const m3u8Url = await extractM3u8Url(videoUrl);
+  console.log("[Utage] downloadUtageVideoToPath: m3u8Url", m3u8Url);
+  await downloadHlsVideoToPath(m3u8Url, outputPath);
 }
