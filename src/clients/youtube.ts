@@ -150,13 +150,46 @@ async function createCookiesFileIfNeeded(): Promise<
  * @param cookiesFilePath Path to cookies file (if any)
  */
 function getCookieArgs(cookiesFilePath: string | null): string[] {
-  const args: string[] = [];
-
   if (cookiesFilePath) {
-    args.push("--cookies", cookiesFilePath);
+    return ["--cookies", cookiesFilePath];
   }
 
-  return args;
+  if (config.youtubeCookiesFromBrowser) {
+    return ["--cookies-from-browser", config.youtubeCookiesFromBrowser];
+  }
+
+  return [];
+}
+
+const AUTH_REQUIRED_YTDLP_ERROR_PATTERNS: RegExp[] = [
+  /join this channel/i,
+  /members-only/i,
+  /private video/i,
+  /sign in/i,
+  /age-restricted/i,
+  /confirm you[''’]?re not a bot/i,
+];
+
+function isAuthRequiredYtDlpError(stderrText: string): boolean {
+  return AUTH_REQUIRED_YTDLP_ERROR_PATTERNS.some((p) => p.test(stderrText));
+}
+
+function getYouTubeAuthHint(stderrText: string): string {
+  if (!isAuthRequiredYtDlpError(stderrText)) {
+    return "";
+  }
+
+  const hasCookieConfig = Boolean(
+    config.youtubeCookies ||
+      config.youtubeCookiesBase64 ||
+      config.youtubeCookiesFromBrowser,
+  );
+
+  if (hasCookieConfig) {
+    return " YouTube cookies are configured, but they may be expired or from an account without access to this video.";
+  }
+
+  return " This YouTube video requires authenticated access. Set YOUTUBE_COOKIES to a Netscape cookies.txt file, YOUTUBE_COOKIES_BASE64 for Cloud Run, or YOUTUBE_COOKIES_FROM_BROWSER=chrome for local runs with a logged-in browser account that can view the video.";
 }
 
 function getProxyArgs(): string[] {
@@ -299,7 +332,11 @@ export async function getYouTubeFileMetadata(
 
     if (!success) {
       const errorText = decoder.decode(stderr).trim();
-      throw new Error(`Failed to fetch YouTube metadata: ${errorText}`);
+      throw new Error(
+        `Failed to fetch YouTube metadata: ${errorText}${
+          getYouTubeAuthHint(errorText)
+        }`,
+      );
     }
 
     const stdoutText = decoder.decode(stdout).trim();
@@ -444,7 +481,9 @@ export async function downloadYouTubeAudioToPath(
       }
 
       throw new Error(
-        `Failed to download audio from YouTube: ${errorText.substring(0, 500)}`,
+        `Failed to download audio from YouTube: ${errorText.substring(0, 500)}${
+          getYouTubeAuthHint(errorText)
+        }`,
       );
     }
 

@@ -11,6 +11,9 @@ Makefile
 .env
 .env.local
 .env.example
+cookies.txt
+*_cookies.txt
+youtube_cookies*.txt
 *.log
 node_modules
 dist

@@ -2,6 +2,9 @@
 .env
 .env.local
 .env.production
+cookies.txt
+*_cookies.txt
+youtube_cookies*.txt
 
 # Logs
 *.log

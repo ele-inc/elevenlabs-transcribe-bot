@@ -208,7 +208,7 @@ Cloud Run の URL は `gcloud run deploy` の出力、または Google Cloud Con
 
 ## YouTube Cookies のセットアップ
 
-YouTube 動画の文字起こしで「Sign in to confirm you're not a bot」エラーが出る場合は、認証 cookie を提供する必要があります。
+YouTube 動画の文字起こしで「Sign in to confirm you're not a bot」やメンバー限定動画のエラーが出る場合は、その動画を視聴できるアカウントの認証 cookie を提供する必要があります。
 
 ### なぜ Cloud Run でこのエラーが出るのか（ローカルでは出ないのに）
 
@@ -276,6 +276,23 @@ cookie をファイルに保存する場合：
 
 **注意**: 方法 2 はブラウザが YouTube にログイン済みである必要があります。実際の cookies.txt ファイルを得たい場合はブラウザ拡張（方法 1）の方が簡単で確実です。
 
+#### 方法 3: ローカル実行でブラウザ cookie を直接使う
+
+ローカルの `make transcribe` では、`yt-dlp --cookies-from-browser` を環境変数で指定できます。cookie ファイルのエクスポートなしで試せます。
+
+```bash
+# .env に追加
+YOUTUBE_COOKIES_FROM_BROWSER=chrome
+
+# Firefox の場合
+YOUTUBE_COOKIES_FROM_BROWSER=firefox
+
+# macOS Safari の場合
+YOUTUBE_COOKIES_FROM_BROWSER=safari
+```
+
+Chrome の別プロファイルを使う場合は `YOUTUBE_COOKIES_FROM_BROWSER="chrome:Profile 1"` のように指定します。ブラウザ側で、その YouTube 動画を視聴できるアカウントにログインしている必要があります。
+
 ### Cloud Run デプロイ用
 
 1. cookie を `cookies.txt` ファイルにエクスポート（上記参照）
@@ -308,6 +325,12 @@ cookie をファイルに保存する場合：
    ```
    YOUTUBE_COOKIES="/path/to/cookies.txt"
    ```
+
+ローカル実行だけなら、cookie ファイルの代わりに以下でも動作します：
+
+```
+YOUTUBE_COOKIES_FROM_BROWSER=chrome
+```
 
 **重要事項：**
 

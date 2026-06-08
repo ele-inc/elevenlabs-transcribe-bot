@@ -217,6 +217,9 @@ Examples:
 
 ${buildSupportedSourcesSection()}Note: Video files (mp4, mkv, mov, etc.) are automatically converted to audio
       before transcription via ffmpeg.
+      Restricted YouTube videos require cookies from an account with access.
+      For local runs, set YOUTUBE_COOKIES_FROM_BROWSER=chrome or
+      YOUTUBE_COOKIES=/path/to/cookies.txt.
 `);
 }
 
