@@ -200,6 +200,14 @@ function getPasswordArgs(password?: string): string[] {
   return password ? ["--video-password", password] : [];
 }
 
+function isZoomRecordingUrl(parsed: URL): boolean {
+  const hostname = parsed.hostname.toLowerCase();
+  const isZoomHost = hostname === "zoom.us" ||
+    /^[^.]+\.zoom\.us$/.test(hostname);
+  return isZoomHost &&
+    /^\/rec(?:ording)?\/(?:play|share)\//.test(parsed.pathname);
+}
+
 // Errors that typically resolve on retry (bot detection on the proxy IP,
 // transient rate limits). Permanent errors like "Video unavailable" or
 // "Private video" are not listed — retrying those wastes time and bandwidth.
@@ -249,7 +257,7 @@ export function isYouTubeUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
-    // Support YouTube and other yt-dlp compatible sites like Loom, Vimeo
+    // Support YouTube and other yt-dlp compatible sites like Loom, Vimeo, Zoom
     // Exclude Vimeo review URLs (/reviews/{uuid}/videos/{id}) - handled by VimeoReviewAdapter
     if (
       hostname.includes("vimeo.com") &&
@@ -261,7 +269,8 @@ export function isYouTubeUrl(url: string): boolean {
       hostname === "youtu.be" ||
       hostname.endsWith("youtube-nocookie.com") ||
       hostname.includes("loom.com") ||
-      hostname.includes("vimeo.com");
+      hostname.includes("vimeo.com") ||
+      isZoomRecordingUrl(parsed);
   } catch {
     return false;
   }
@@ -272,8 +281,12 @@ export function extractYouTubeVideoId(url: string): string | null {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
 
-    // For Loom, Vimeo, and other yt-dlp sites, return the full URL
-    if (hostname.includes("loom.com") || hostname.includes("vimeo.com")) {
+    // For Loom, Vimeo, Zoom, and other yt-dlp sites, return the full URL
+    if (
+      hostname.includes("loom.com") ||
+      hostname.includes("vimeo.com") ||
+      isZoomRecordingUrl(parsed)
+    ) {
       return url;
     }
 
@@ -639,12 +652,12 @@ export async function downloadYouTubeVideoToPath(
 
     if (!success) {
       throw new Error(
-        "Failed to download video from YouTube/Loom/Vimeo. See yt-dlp output above.",
+        "Failed to download video from YouTube/Loom/Vimeo/Zoom. See yt-dlp output above.",
       );
     }
 
     throw new Error(
-      "YouTube/Loom/Vimeo video download completed but output file was not found",
+      "YouTube/Loom/Vimeo/Zoom video download completed but output file was not found",
     );
   } finally {
     await cleanupYtDlpOutputs(

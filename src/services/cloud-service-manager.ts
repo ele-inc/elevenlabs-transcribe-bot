@@ -3,7 +3,12 @@
  * Currently supports Google Drive, easily extensible for Dropbox, OneDrive, etc.
  */
 
-import { CloudDownloadOptions, CloudService, CloudDownloadResult, cloudServiceRegistry } from "./cloud-service.ts";
+import {
+  CloudDownloadOptions,
+  CloudDownloadResult,
+  CloudService,
+  cloudServiceRegistry,
+} from "./cloud-service.ts";
 import { GoogleDriveAdapter } from "../adapters/google-drive-adapter.ts";
 import { TempFileManager } from "./temp-file-manager.ts";
 import { DropboxAdapter } from "../adapters/dropbox-adapter.ts";
@@ -67,7 +72,10 @@ export class CloudServiceManager {
   /**
    * Download file from any supported cloud service
    */
-  async downloadFromUrl(url: string, opts?: CloudDownloadOptions): Promise<CloudDownloadResult> {
+  async downloadFromUrl(
+    url: string,
+    opts?: CloudDownloadOptions,
+  ): Promise<CloudDownloadResult> {
     const service = cloudServiceRegistry.getServiceForUrl(url);
 
     if (!service) {
@@ -92,19 +100,26 @@ export class CloudServiceManager {
       // Determine extension from metadata filename or mimeType
       let extension = "tmp";
       if (metadata.filename) {
-        const filenameExt = metadata.filename.split('.').pop()?.toLowerCase();
+        const filenameExt = metadata.filename.split(".").pop()?.toLowerCase();
         if (filenameExt && filenameExt.length <= 5) {
           extension = filenameExt;
         }
       }
       // Fallback to service preferred extension if no valid extension found
-      if (extension === "tmp" && typeof service.getPreferredFileExtension === "function") {
+      if (
+        extension === "tmp" &&
+        typeof service.getPreferredFileExtension === "function"
+      ) {
         extension = service.getPreferredFileExtension();
       }
 
+      const tempPrefix = service.name
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "_")
+        .replace(/^_+|_+$/g, "") || "cloud";
       const tempPath = await this.tempManager.createTempFile(
-        service.name.toLowerCase().replace(/\s+/g, '_'),
-        extension
+        tempPrefix,
+        extension,
       );
 
       // Download file
@@ -143,7 +158,7 @@ export class CloudServiceManager {
    * Get list of supported services
    */
   getSupportedServices(): string[] {
-    return cloudServiceRegistry.getAllServices().map(s => s.name);
+    return cloudServiceRegistry.getAllServices().map((s) => s.name);
   }
 }
 

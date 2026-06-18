@@ -2,8 +2,12 @@
  * Slack interaction handler for buttons and modals
  */
 
-import { openSlackModal, updateSlackModal, sendSlackMessage } from "../clients/slack.ts";
-import { okResponse, jsonResponse, badRequest } from "../utils/http-utils.ts";
+import {
+  openSlackModal,
+  sendSlackMessage,
+  updateSlackModal,
+} from "../clients/slack.ts";
+import { badRequest, jsonResponse, okResponse } from "../utils/http-utils.ts";
 import { createPlatformAdapter } from "../adapters/platform-adapter.ts";
 import { TranscriptionProcessor } from "../services/transcription-processor.ts";
 import { TranscriptionOptions } from "../core/types.ts";
@@ -27,7 +31,7 @@ function createTranscriptionModal(
     timestamp?: string;
     audioEvents?: string;
     summarize?: string;
-  }
+  },
 ) {
   // deno-lint-ignore no-explicit-any
   const blocks: any[] = [
@@ -49,7 +53,8 @@ function createTranscriptionModal(
       },
       hint: {
         type: "plain_text",
-        text: "対応: Google Drive, Dropbox, Loom, Vimeo, Utage（公開設定が必要）",
+        text:
+          "対応: Google Drive, Dropbox, Loom, Vimeo, Zoom, Utage（公開設定が必要）",
       },
     },
     {
@@ -63,7 +68,8 @@ function createTranscriptionModal(
           type: "plain_text",
           text: "（任意）パスワードが必要な動画の場合のみ入力",
         },
-        ...(currentValues?.password && { initial_value: currentValues.password }),
+        ...(currentValues?.password &&
+          { initial_value: currentValues.password }),
       },
       label: {
         type: "plain_text",
@@ -71,7 +77,7 @@ function createTranscriptionModal(
       },
       hint: {
         type: "plain_text",
-        text: "現在パスワード保護に対応しているのは Vimeo のみです。",
+        text: "Vimeo / Zoom など、パスワードが必要な動画URLで使用します。",
       },
     },
     {
@@ -86,7 +92,10 @@ function createTranscriptionModal(
         action_id: "diarize_select",
         initial_option: diarizeEnabled
           ? { text: { type: "plain_text", text: "有効" }, value: "true" }
-          : { text: { type: "plain_text", text: "無効（1人の場合）" }, value: "false" },
+          : {
+            text: { type: "plain_text", text: "無効（1人の場合）" },
+            value: "false",
+          },
         options: [
           {
             text: { type: "plain_text", text: "有効" },
@@ -115,7 +124,8 @@ function createTranscriptionModal(
             type: "plain_text",
             text: "田中,山田,佐藤",
           },
-          ...(currentValues?.speakerNames && { initial_value: currentValues.speakerNames }),
+          ...(currentValues?.speakerNames &&
+            { initial_value: currentValues.speakerNames }),
         },
         label: {
           type: "plain_text",
@@ -134,7 +144,10 @@ function createTranscriptionModal(
           type: "static_select",
           action_id: "num_speakers_select",
           initial_option: {
-            text: { type: "plain_text", text: `${currentValues?.numSpeakers || "2"}人` },
+            text: {
+              type: "plain_text",
+              text: `${currentValues?.numSpeakers || "2"}人`,
+            },
             value: currentValues?.numSpeakers || "2",
           },
           options: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({
@@ -146,7 +159,7 @@ function createTranscriptionModal(
           type: "plain_text",
           text: "🔢 話者数（話者名未入力時のみ使用）",
         },
-      }
+      },
     );
   }
 
@@ -226,7 +239,7 @@ function createTranscriptionModal(
           },
         ],
       },
-    }
+    },
   );
 
   return {
@@ -258,7 +271,8 @@ export function createTranscriptionButtonBlocks() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "🎙️ *文字起こしボット*\nURL から、またはファイル添付から文字起こしを実行できます。",
+        text:
+          "🎙️ *文字起こしボット*\nURL から、またはファイル添付から文字起こしを実行できます。",
       },
     },
     {
@@ -276,7 +290,9 @@ export function createTranscriptionButtonBlocks() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `対応サービス: ${SUPPORTED_SERVICES.join(" / ")}\n下のボタンから設定・実行してください。`,
+        text: `対応サービス: ${
+          SUPPORTED_SERVICES.join(" / ")
+        }\n下のボタンから設定・実行してください。`,
       },
     },
     {
@@ -310,14 +326,16 @@ export function createTranscriptionButtonBlocks() {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "音声・動画ファイルを Slack に添付し、`@bot` にメンションしてください。\n_※ ボタン操作は不要です_",
+        text:
+          "音声・動画ファイルを Slack に添付し、`@bot` にメンションしてください。\n_※ ボタン操作は不要です_",
       },
     },
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "*オプション（メンション時に半角スペース区切りで指定）*\n• `--no-diarize` : 話者分離OFF（1人の場合に推奨）\n• `--speaker-names 田中,山田,佐藤` : 話者名を指定（話者数は自動設定）\n• `--num-speakers 3` : 話者数のみ指定（話者名が不明な場合）\n• `--no-timestamp` : タイムスタンプ非表示\n• `--no-summarize` : 要約をスキップ\n\n例: `@bot --speaker-names 田中,山田,佐藤`（添付ファイル付き）",
+        text:
+          "*オプション（メンション時に半角スペース区切りで指定）*\n• `--no-diarize` : 話者分離OFF（1人の場合に推奨）\n• `--speaker-names 田中,山田,佐藤` : 話者名を指定（話者数は自動設定）\n• `--num-speakers 3` : 話者数のみ指定（話者名が不明な場合）\n• `--no-timestamp` : タイムスタンプ非表示\n• `--no-summarize` : 要約をスキップ\n\n例: `@bot --speaker-names 田中,山田,佐藤`（添付ファイル付き）",
       },
     },
   ];
@@ -333,7 +351,7 @@ async function handleButtonClick(payload: {
 }) {
   const view = createTranscriptionModal(
     payload.channel.id,
-    payload.message.ts
+    payload.message.ts,
   );
 
   const result = await openSlackModal(payload.trigger_id, view);
@@ -345,26 +363,43 @@ async function handleButtonClick(payload: {
 /**
  * Parse modal submission values into TranscriptionOptions
  */
-function parseModalValues(values: Record<string, Record<string, { value?: string; selected_option?: { value: string } }>>): {
+function parseModalValues(
+  values: Record<
+    string,
+    Record<string, { value?: string; selected_option?: { value: string } }>
+  >,
+): {
   options: TranscriptionOptions;
   url: string | null;
   password: string | null;
 } {
-  const getSelectValue = (blockId: string, actionId: string): string | undefined => {
+  const getSelectValue = (
+    blockId: string,
+    actionId: string,
+  ): string | undefined => {
     return values[blockId]?.[actionId]?.selected_option?.value;
   };
 
-  const getInputValue = (blockId: string, actionId: string): string | undefined => {
+  const getInputValue = (
+    blockId: string,
+    actionId: string,
+  ): string | undefined => {
     return values[blockId]?.[actionId]?.value;
   };
 
   const diarize = getSelectValue("diarize_block", "diarize_select") !== "false";
-  const showTimestamp = getSelectValue("timestamp_block", "timestamp_select") !== "false";
-  const tagAudioEvents = getSelectValue("audio_events_block", "audio_events_select") !== "false";
-  const summarize = getSelectValue("summarize_block", "summarize_select") !== "false";
+  const showTimestamp =
+    getSelectValue("timestamp_block", "timestamp_select") !== "false";
+  const tagAudioEvents =
+    getSelectValue("audio_events_block", "audio_events_select") !== "false";
+  const summarize =
+    getSelectValue("summarize_block", "summarize_select") !== "false";
 
   // Parse speaker names first
-  const speakerNamesStr = getInputValue("speaker_names_block", "speaker_names_input");
+  const speakerNamesStr = getInputValue(
+    "speaker_names_block",
+    "speaker_names_input",
+  );
   const speakerNames = speakerNamesStr
     ? speakerNamesStr.split(/[,，、]/).map((s) => s.trim()).filter(Boolean)
     : undefined;
@@ -374,12 +409,16 @@ function parseModalValues(values: Record<string, Record<string, { value?: string
   if (speakerNames && speakerNames.length > 0) {
     numSpeakers = speakerNames.length;
   } else {
-    const numSpeakersStr = getSelectValue("num_speakers_block", "num_speakers_select");
+    const numSpeakersStr = getSelectValue(
+      "num_speakers_block",
+      "num_speakers_select",
+    );
     numSpeakers = numSpeakersStr ? parseInt(numSpeakersStr, 10) : 2;
   }
 
   const url = getInputValue("url_block", "url_input") || null;
-  const password = getInputValue("password_block", "password_input")?.trim() || null;
+  const password = getInputValue("password_block", "password_input")?.trim() ||
+    null;
 
   return {
     options: {
@@ -402,19 +441,24 @@ async function handleModalSubmission(payload: {
   view: {
     private_metadata: string;
     state: {
-      values: Record<string, Record<string, { value?: string; selected_option?: { value: string } }>>;
+      values: Record<
+        string,
+        Record<string, { value?: string; selected_option?: { value: string } }>
+      >;
     };
   };
   user: { id: string };
 }) {
   const { channelId, threadTs } = JSON.parse(payload.view.private_metadata);
-  const { options, url, password } = parseModalValues(payload.view.state.values);
+  const { options, url, password } = parseModalValues(
+    payload.view.state.values,
+  );
 
   if (!url) {
     await sendSlackMessage(
       channelId,
       "❌ URLを入力してください。",
-      threadTs
+      threadTs,
     );
     return;
   }
@@ -424,8 +468,8 @@ async function handleModalSubmission(payload: {
   if (cloudUrls.length === 0) {
     await sendSlackMessage(
       channelId,
-      "❌ 対応していないURLです。Google Drive、YouTube、Dropbox等のURLを入力してください。",
-      threadTs
+      "❌ 対応していないURLです。Google Drive、YouTube、Dropbox、Zoom等のURLを入力してください。",
+      threadTs,
     );
     return;
   }
@@ -481,14 +525,23 @@ export async function handleSlackInteractions(req: Request): Promise<Response> {
       const currentValues = {
         url: values.url_block?.url_input?.value,
         password: values.password_block?.password_input?.value,
-        numSpeakers: values.num_speakers_block?.num_speakers_select?.selected_option?.value,
+        numSpeakers: values.num_speakers_block?.num_speakers_select
+          ?.selected_option?.value,
         speakerNames: values.speaker_names_block?.speaker_names_input?.value,
-        timestamp: values.timestamp_block?.timestamp_select?.selected_option?.value,
-        audioEvents: values.audio_events_block?.audio_events_select?.selected_option?.value,
-        summarize: values.summarize_block?.summarize_select?.selected_option?.value,
+        timestamp: values.timestamp_block?.timestamp_select?.selected_option
+          ?.value,
+        audioEvents: values.audio_events_block?.audio_events_select
+          ?.selected_option?.value,
+        summarize: values.summarize_block?.summarize_select?.selected_option
+          ?.value,
       };
 
-      const updatedView = createTranscriptionModal(channelId, threadTs, diarizeEnabled, currentValues);
+      const updatedView = createTranscriptionModal(
+        channelId,
+        threadTs,
+        diarizeEnabled,
+        currentValues,
+      );
       const result = await updateSlackModal(payload.view.id, updatedView);
       if (!result.ok) {
         console.error("Failed to update modal:", result.error);

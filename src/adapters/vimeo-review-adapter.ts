@@ -12,7 +12,7 @@ import {
 export class VimeoReviewAdapter extends BaseCloudService {
   readonly name = "Vimeo Review";
   readonly description =
-    "Vimeo の Review ページ（プライベート共有用 URL）。通常の Vimeo は YouTube/Loom/Vimeo アダプタで処理。";
+    "Vimeo の Review ページ（プライベート共有用 URL）。通常の Vimeo は YouTube/Loom/Vimeo/Zoom アダプタで処理。";
   readonly urlExamples = [
     "https://vimeo.com/<VIDEO_ID>/<REVIEW_HASH>",
   ];

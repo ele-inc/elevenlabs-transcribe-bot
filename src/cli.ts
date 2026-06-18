@@ -212,7 +212,7 @@ Examples:
   # Single speaker — disable diarization for cleaner output
   scribe monologue.wav --no-diarize
 
-  # YouTube / Loom / Google Drive / Dropbox / Vimeo / Utage / HLS URL
+  # YouTube / Loom / Google Drive / Dropbox / Vimeo / Zoom / Utage / HLS URL
   scribe 'https://youtu.be/<VIDEO_ID>' --speaker-names "Host,Guest"
 
 ${buildSupportedSourcesSection()}Note: Video files (mp4, mkv, mov, etc.) are automatically converted to audio
@@ -327,8 +327,8 @@ async function main() {
 
     // Add header to transcript: URL takes precedence over filename when present
     const baseFilename = basename(filename);
-    const finalTranscript =
-      createTranscriptionHeader(baseFilename, sourceUrl) + result.transcript;
+    const finalTranscript = createTranscriptionHeader(baseFilename, sourceUrl) +
+      result.transcript;
 
     // Determine output path
     let outputPath = options.output;
@@ -396,15 +396,15 @@ async function main() {
     // Copy transcript text to clipboard
     const clipboardContent = options.format === "json"
       ? JSON.stringify(
-          {
-            file: baseFilename,
-            transcript: finalTranscript,
-            languageCode: result.languageCode,
-            ...(result.words ? { words: result.words } : {}),
-          },
-          null,
-          2,
-        )
+        {
+          file: baseFilename,
+          transcript: finalTranscript,
+          languageCode: result.languageCode,
+          ...(result.words ? { words: result.words } : {}),
+        },
+        null,
+        2,
+      )
       : finalTranscript;
 
     await copyToClipboard(clipboardContent);

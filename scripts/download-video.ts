@@ -121,18 +121,19 @@ Options:
   -o, --output <file>    Output file path. If no extension is given, .mp4 is added.
   --dir <dir>            Output directory (default: current directory)
   --force                Overwrite the output file if it exists
-  --password <value>     Video password for yt-dlp sources such as private Vimeo
+  --password <value>     Video password for yt-dlp sources such as private Vimeo/Zoom
 
 Supported sources:
   Utage video pages
   Vimeo Review pages
-  YouTube / Loom / regular Vimeo URLs via yt-dlp
+  YouTube / Loom / regular Vimeo / Zoom recording URLs via yt-dlp
   Direct HLS .m3u8 URLs
   Google Drive and Dropbox video files
 
 Examples:
   dlvideo 'https://example.utage-system.com/video/xxxxx'
   dlvideo 'https://vimeo.com/xxxxx' --password 'secret' -o video.mp4
+  dlvideo 'https://us02web.zoom.us/rec/share/xxxxx' --password 'secret' -o zoom.mp4
   dlvideo 'https://vimeo.com/reviews/xxxxx/videos/123456789' --password 'secret'
   dlvideo 'https://example.com/video.m3u8' --dir ~/Downloads
 `);
@@ -343,11 +344,13 @@ async function buildDownloadPlan(
   if (isYouTubeUrl(url)) {
     const videoId = extractYouTubeVideoId(url);
     if (!videoId) {
-      throw new Error("Could not extract video ID from YouTube/Loom/Vimeo URL");
+      throw new Error(
+        "Could not extract video ID from YouTube/Loom/Vimeo/Zoom URL",
+      );
     }
 
     return {
-      serviceName: "YouTube/Loom/Vimeo",
+      serviceName: "YouTube/Loom/Vimeo/Zoom",
       metadata: await getYouTubeVideoMetadata(videoId, {
         password: options.password,
       }),
