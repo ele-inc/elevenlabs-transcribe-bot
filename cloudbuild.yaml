@@ -45,7 +45,6 @@ steps:
           --min-instances=0 \
           --max-instances=1 \
           --port=8080 \
-          --clear-env-vars \
           --set-env-vars="$${RUNTIME_ENV}" \
           --set-secrets="$${mapping}"
 
