@@ -62,7 +62,6 @@ gcloud run deploy "$SERVICE" \
   --min-instances=0 \
   --max-instances=1 \
   --port=8080 \
-  --clear-env-vars \
   --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS" \
   --set-secrets="$mapping"
 
