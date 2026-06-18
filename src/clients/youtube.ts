@@ -208,6 +208,30 @@ function isZoomRecordingUrl(parsed: URL): boolean {
     /^\/rec(?:ording)?\/(?:play|share)\//.test(parsed.pathname);
 }
 
+function isZoomRecordingUrlString(url: string): boolean {
+  try {
+    return isZoomRecordingUrl(new URL(url));
+  } catch {
+    return false;
+  }
+}
+
+function getAudioFormatSelector(url: string): string {
+  if (isZoomRecordingUrlString(url)) {
+    return "view_with_share/view/best";
+  }
+
+  return "bestaudio[ext=m4a]/bestaudio/best[ext=m4a]/bestaudio[acodec!=none]/bestaudio/best[acodec!=none][height<=720]/best[height<=720]";
+}
+
+function getVideoFormatSelector(url: string): string {
+  if (isZoomRecordingUrlString(url)) {
+    return "view_with_share/view/best";
+  }
+
+  return "b[ext=mp4][protocol^=http]/bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b";
+}
+
 // Errors that typically resolve on retry (bot detection on the proxy IP,
 // transient rate limits). Permanent errors like "Video unavailable" or
 // "Private video" are not listed — retrying those wastes time and bandwidth.
@@ -418,7 +442,7 @@ export async function downloadYouTubeAudioToPath(
     // First try audio-only formats, then fallback to video formats if needed
     const { success, stderr } = await runYtDlp([
       "-f",
-      "bestaudio[ext=m4a]/bestaudio/best[ext=m4a]/bestaudio[acodec!=none]/bestaudio/best[acodec!=none][height<=720]/best[height<=720]",
+      getAudioFormatSelector(url),
       "--extract-audio",
       "--audio-format",
       "mp3",
@@ -616,7 +640,7 @@ export async function downloadYouTubeVideoToPath(
   try {
     const args = [
       "-f",
-      "b[ext=mp4][protocol^=http]/bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
+      getVideoFormatSelector(url),
       "--merge-output-format",
       "mp4",
       "--remux-video",
