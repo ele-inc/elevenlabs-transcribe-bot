@@ -12,6 +12,7 @@ export const SUPPORTED_SERVICES = [
   "YouTube",
   "Vimeo",
   "Loom",
+  "Zoom",
   "Utage",
   "HLS(.m3u8)",
 ];
