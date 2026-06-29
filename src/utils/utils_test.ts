@@ -53,19 +53,32 @@ Deno.test("formatTranscriptSegments renders timestamps without speaker labels", 
   assertEquals(transcript, "0:00 alpha bravo\n0:12 charlie delta");
 });
 
-Deno.test("formatTranscriptSegments adds speaker labels only when diarization is enabled", () => {
+Deno.test("formatTranscriptSegments groups contiguous diarized speaker segments", () => {
   const transcript = formatTranscriptSegments(
     [
       { text: "alpha bravo", start: 0, speaker: "speaker_0" },
-      { text: "charlie delta", start: 12, speaker: "speaker_1" },
+      { text: "charlie delta", start: 12, speaker: "speaker_0" },
+      { text: "echo foxtrot", start: 18, speaker: "speaker_1" },
     ],
     { ...baseOptions, diarize: true },
   );
 
   assertEquals(
     transcript,
-    "0:00 speaker_0: alpha bravo\n0:12 speaker_1: charlie delta",
+    "speaker_0:\n0:00 alpha bravo\n0:12 charlie delta\n\nspeaker_1:\n0:18 echo foxtrot",
   );
+});
+
+Deno.test("formatTranscriptSegments groups diarized text without timestamps", () => {
+  const transcript = formatTranscriptSegments(
+    [
+      { text: "alpha bravo", start: 0, speaker: "speaker_0" },
+      { text: "charlie delta", start: 12, speaker: "speaker_0" },
+    ],
+    { ...baseOptions, diarize: true, showTimestamp: false },
+  );
+
+  assertEquals(transcript, "speaker_0:\nalpha bravo\ncharlie delta");
 });
 
 Deno.test("segmentWords can split on speaker changes as an extra boundary", () => {
