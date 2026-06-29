@@ -1,7 +1,13 @@
 import { TranscriptionOptions } from "../core/types.ts";
 import { formatOptionsText } from "../services/file-processor.ts";
 import { sendSlackMessage, uploadTranscriptToSlack, downloadSlackFileToPath } from "../clients/slack.ts";
-import { editInteractionReply, sendDiscordMessage, uploadTranscriptToDiscord, downloadDiscordFile } from "../clients/discord.ts";
+import {
+  editInteractionReply,
+  sendDiscordMessage,
+  uploadTranscriptToDiscord,
+  downloadDiscordFile,
+  isUnknownWebhookError,
+} from "../clients/discord.ts";
 import { getUsageMessage } from "../utils/messages.ts";
 import {
   buildSummaryBlocks,
@@ -91,12 +97,12 @@ export class DiscordAdapter implements PlatformAdapter {
   ) {}
 
   async sendStatusMessage(message: string): Promise<void> {
-    await editInteractionReply(this.interaction.token, message);
+    await this.editInteractionReplyOrSendToChannel(message);
   }
 
   async sendErrorMessage(error: string, hint?: string): Promise<void> {
     const message = hint ? `⚠️ ${error}\n${hint}` : `⚠️ ${error}`;
-    await editInteractionReply(this.interaction.token, message);
+    await this.editInteractionReplyOrSendToChannel(message);
   }
 
   async sendUsageMessage(): Promise<void> {
@@ -124,6 +130,32 @@ export class DiscordAdapter implements PlatformAdapter {
     // Discord returns Uint8Array, so we need to write it to file
     const fileData = await downloadDiscordFile(fileURL);
     await Deno.writeFile(filePath, fileData);
+  }
+
+  private async editInteractionReplyOrSendToChannel(
+    message: string,
+  ): Promise<void> {
+    try {
+      await editInteractionReply(
+        this.interaction.application_id,
+        this.interaction.token,
+        message,
+      );
+    } catch (error) {
+      if (!isUnknownWebhookError(error)) {
+        throw error;
+      }
+
+      const channelId = this.interaction.channel?.id || "";
+      if (!channelId) {
+        throw error;
+      }
+
+      console.warn(
+        "Discord interaction webhook expired; sending message to channel instead.",
+      );
+      await sendDiscordMessage(channelId, message);
+    }
   }
 }
 

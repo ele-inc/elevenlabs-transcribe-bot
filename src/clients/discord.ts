@@ -7,6 +7,36 @@ import {
 import nacl from "tweetnacl";
 import { config } from "../core/config.ts";
 
+export class DiscordApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: number,
+    public responseBody?: string,
+  ) {
+    super(message);
+    this.name = "DiscordApiError";
+  }
+}
+
+export function isUnknownWebhookError(error: unknown): boolean {
+  return error instanceof DiscordApiError &&
+    error.status === 404 &&
+    error.code === 10015;
+}
+
+function parseDiscordError(body: string): { message?: string; code?: number } {
+  try {
+    const parsed = JSON.parse(body);
+    return {
+      message: typeof parsed.message === "string" ? parsed.message : undefined,
+      code: typeof parsed.code === "number" ? parsed.code : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 // Helper function to convert hex string to Uint8Array
 function hexToUint8Array(hex: string): Uint8Array {
   const matches = hex.match(/.{1,2}/g);
@@ -160,17 +190,17 @@ export function deferInteractionReply(): Response {
 
 // Edit interaction reply
 export async function editInteractionReply(
+  applicationId: string,
   interactionToken: string,
   content: string,
   embeds?: APIEmbed[]
 ): Promise<void> {
-  const url = `https://discord.com/api/v10/webhooks/${config.discordApplicationId}/${interactionToken}/messages/@original`;
+  const url = `https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}/messages/@original`;
 
   const response = await fetch(url, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bot ${config.discordBotToken}`,
     },
     body: JSON.stringify({
       content,
@@ -180,7 +210,16 @@ export async function editInteractionReply(
 
   if (!response.ok) {
     const error = await response.text();
-    console.error("Failed to edit interaction reply:", error);
+    const parsed = parseDiscordError(error);
+    if (!(response.status === 404 && parsed.code === 10015)) {
+      console.error("Failed to edit interaction reply:", error);
+    }
+    throw new DiscordApiError(
+      `Discord interaction reply edit failed: ${parsed.message || response.statusText}`,
+      response.status,
+      parsed.code,
+      error,
+    );
   }
 }
 

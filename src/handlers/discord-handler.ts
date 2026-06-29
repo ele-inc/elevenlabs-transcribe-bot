@@ -17,7 +17,6 @@ import {
   verifyDiscordRequest,
   replyToInteraction,
   deferInteractionReply,
-  editInteractionReply,
 } from "../clients/discord.ts";
 import { parseTranscriptionOptions } from "../utils/utils.ts";
 import {
@@ -140,11 +139,13 @@ function handleTranscribeCommand(
       });
     } catch (error) {
       console.error("Error processing transcription:", error);
-      // Try to update the interaction with error message
-      await editInteractionReply(
-        interaction.token,
-        `❌ ${getErrorMessage(error)}`
-      ).catch(console.error);
+      const adapter = createPlatformAdapter("discord", {
+        channelId: interaction.channel?.id || "",
+        interaction,
+      });
+      await adapter.sendErrorMessage(getErrorMessage(error)).catch(
+        console.error,
+      );
     }
   });
 
