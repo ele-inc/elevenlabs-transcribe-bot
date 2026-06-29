@@ -20,10 +20,9 @@
    - Formula: `Formula/scribe.rb`
    - この formula は GitHub Release asset ではなく git tag から source build するため、`tag:` と `revision:` を新しいリリースに更新する。
    - 例: `tag: "v0.4.0"` と、その tag が指す commit hash。
-7. Cloud Run の Bot を更新する場合は、このリポジトリの `scripts/deploy.sh` または `make deploy` を使う。
-   - `gcloud` が再認証を要求する場合は非対話実行では続行できないため、ユーザー側で `gcloud auth login` が必要。
 
 ## 補足
 
 - 全体の `deno check` は、既存スクリプト側の型エラーで止まることがある。リリース前確認では、変更対象ファイルに絞った `deno check` も併用する。
 - Homebrew でインストールしているユーザーに `scribe` の更新を届けるには、GitHub Release だけでは不十分。必ず `ele-inc/homebrew-tap` も更新する。
+- Cloud Run の Bot は `main` への push で自動デプロイされる。明示的に依頼されない限り、手動デプロイは不要。
