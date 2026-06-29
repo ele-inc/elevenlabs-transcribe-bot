@@ -8,6 +8,7 @@ import { createTranscriptionHeader } from "./utils/utils.ts";
 import { cloudServiceManager } from "./services/cloud-service-manager.ts";
 import { cloudServiceRegistry } from "./services/cloud-service.ts";
 import { runInit } from "./init.ts";
+import { formatVersion } from "./version.ts";
 
 function userConfigEnvPath(): string {
   const home = Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || "";
@@ -74,6 +75,11 @@ function parseArgs(): { filePath: string; options: CliOptions } {
   // Show help if no arguments or help flag
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     printHelp();
+    Deno.exit(0);
+  }
+
+  if (args.includes("--version") || args.includes("-V")) {
+    printVersion();
     Deno.exit(0);
   }
 
@@ -174,10 +180,12 @@ ElevenLabs Transcription CLI
 Usage: scribe [options] <file-or-url>
        scribe init
        scribe list-sources
+       scribe version
 
 Subcommands:
   init                 Interactively set API keys (saved to ~/.config/scribe/.env)
   list-sources         Print supported URL sources and exit
+  version              Print CLI version and exit
 
 Arguments:
   <file-or-url>        Path to a local audio/video file, or a URL from one of
@@ -185,6 +193,7 @@ Arguments:
 
 Options:
   -h, --help           Show this help message
+  -V, --version        Show CLI version
   -o, --output <file>  Output file path (default: transcripts/<filename>_<timestamp>.txt)
   -f, --format <type>  Output format: text or json (default: text)
   --no-save            Output to stdout instead of saving to file
@@ -235,6 +244,10 @@ function printSources(): void {
   }
 }
 
+function printVersion(): void {
+  console.log(formatVersion());
+}
+
 /**
  * Main function
  */
@@ -246,6 +259,15 @@ async function main() {
 
   if (Deno.args[0] === "list-sources") {
     printSources();
+    return;
+  }
+
+  if (
+    Deno.args[0] === "version" ||
+    Deno.args.includes("--version") ||
+    Deno.args.includes("-V")
+  ) {
+    printVersion();
     return;
   }
 

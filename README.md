@@ -206,6 +206,16 @@ Cloud Run の URL は `gcloud run deploy` の出力、または Google Cloud Con
 
 **注意:** 一部の YouTube 動画はダウンロードに認証 cookie が必要です。下記「YouTube Cookies のセットアップ」を参照してください。
 
+### CLI
+
+ローカルの `scribe` コマンドでは、インストール済みバージョンを確認できます。
+
+```bash
+scribe version
+# または
+scribe --version
+```
+
 ## YouTube Cookies のセットアップ
 
 YouTube 動画の文字起こしで「Sign in to confirm you're not a bot」やメンバー限定動画のエラーが出る場合は、その動画を視聴できるアカウントの認証 cookie を提供する必要があります。
