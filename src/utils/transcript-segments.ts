@@ -150,20 +150,57 @@ export const formatTranscriptSegments = (
   segments: TranscriptSegment[],
   options: TranscriptionOptions,
 ): string => {
+  if (options.diarize) {
+    return formatDiarizedTranscriptSegments(segments, options);
+  }
+
   return segments
     .map((segment) => {
       const timestamp = options.showTimestamp
         ? `${formatTimestamp(segment.start)} `
         : "";
-
-      if (options.diarize) {
-        const speakerLabel = segment.speaker !== undefined
-          ? getSpeakerLabel(segment.speaker)
-          : "unknown_speaker";
-        return `${timestamp}${speakerLabel}: ${segment.text}`;
-      }
-
       return `${timestamp}${segment.text}`;
     })
     .join("\n");
 };
+
+function formatDiarizedTranscriptSegments(
+  segments: TranscriptSegment[],
+  options: TranscriptionOptions,
+): string {
+  const blocks: string[] = [];
+  let currentSpeaker: string | null = null;
+  let currentLines: string[] = [];
+
+  const flush = () => {
+    if (currentSpeaker !== null) {
+      blocks.push(`${currentSpeaker}:\n${currentLines.join("\n")}`);
+    }
+
+    currentSpeaker = null;
+    currentLines = [];
+  };
+
+  for (const segment of segments) {
+    const speakerLabel = segment.speaker !== undefined
+      ? getSpeakerLabel(segment.speaker)
+      : "unknown_speaker";
+
+    if (currentSpeaker !== null && currentSpeaker !== speakerLabel) {
+      flush();
+    }
+
+    if (currentSpeaker === null) {
+      currentSpeaker = speakerLabel;
+    }
+
+    const timestamp = options.showTimestamp
+      ? `${formatTimestamp(segment.start)} `
+      : "";
+    currentLines.push(`${timestamp}${segment.text}`);
+  }
+
+  flush();
+
+  return blocks.join("\n\n");
+}
