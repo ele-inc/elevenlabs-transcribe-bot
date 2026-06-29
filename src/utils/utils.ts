@@ -1,10 +1,11 @@
-import {
+import type {
   Sentence,
   SpeakerUtterance,
   TranscriptionOptions,
   WordItem,
 } from "../core/types.ts";
 import { isGoogleDriveUrl } from "../clients/googledrive.ts";
+export { formatTimestamp } from "./transcript-segments.ts";
 
 export const parseTranscriptionOptions = (
   text: string = "",
@@ -19,7 +20,8 @@ export const parseTranscriptionOptions = (
   if (namesMatch) {
     const names = namesMatch[1] || namesMatch[2];
     // Split by both full-width and half-width comma
-    speakerNames = names.trim().split(/[,，、]/).map((name) => name.trim()).filter(Boolean);
+    speakerNames = names.trim().split(/[,，、]/).map((name) => name.trim())
+      .filter(Boolean);
   }
 
   // Determine numSpeakers: speakerNames takes priority if provided
@@ -138,19 +140,6 @@ export const getFileExtensionFromMime = (mimeType: string): string => {
   return mimeToExt[normalized] || normalized.split("/")[1] || "bin";
 };
 
-export const formatTimestamp = (seconds: number): string => {
-  const total = Math.max(0, Math.floor(seconds));
-  const hrs = Math.floor(total / 3600);
-  const mins = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-  if (hrs > 0) {
-    return `${hrs}:${mins.toString().padStart(2, "0")}:${
-      secs.toString().padStart(2, "0")
-    }`;
-  }
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-};
-
 export const extractSentences = (words: WordItem[]): Sentence[] => {
   const sentences: Sentence[] = [];
   let currentSentence = "";
@@ -183,7 +172,7 @@ export const extractSentences = (words: WordItem[]): Sentence[] => {
 };
 
 function isSentenceEndMarker(text: string): boolean {
-  return /^[。！？.!?]$/.test(text);
+  return /[。！？.!?]$/.test(text.trim());
 }
 
 export const createTranscriptionHeader = (
@@ -273,7 +262,8 @@ export const convertVideoToAudio = async (
         "-y", // 上書き許可
         "-i",
         inputPath,
-        "-map", "0:a:0", // 最初の音声ストリームのみ
+        "-map",
+        "0:a:0", // 最初の音声ストリームのみ
         "-vn", // 映像無効
         "-sn", // 字幕無効
         "-dn", // データストリーム無効

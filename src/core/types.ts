@@ -16,6 +16,13 @@ export interface Sentence {
   start: number;
 }
 
+export interface TranscriptSegment {
+  text: string;
+  start: number;
+  end?: number;
+  speaker?: string | number;
+}
+
 export interface SlackFile {
   name: string;
   mimetype?: string;

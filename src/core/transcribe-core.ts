@@ -1,17 +1,15 @@
 import { ElevenLabsClient } from "elevenlabs";
 import { dirname } from "@std/path";
+import type { TranscriptionOptions, WordItem } from "./types.ts";
 import {
-  TranscriptionOptions,
-  WordItem,
-} from "./types.ts";
+  formatTranscriptSegments,
+  segmentWords,
+} from "../utils/transcript-segments.ts";
+import { convertVideoToAudio, isVideoFile } from "../utils/utils.ts";
 import {
-  formatTimestamp,
-  extractSentences,
-  groupBySpeaker,
-  isVideoFile,
-  convertVideoToAudio,
-} from "../utils/utils.ts";
-import { identifySpeakers, replaceSpeakerLabels } from "../clients/gemini-client.ts";
+  identifySpeakers,
+  replaceSpeakerLabels,
+} from "../clients/gemini-client.ts";
 import { config } from "./config.ts";
 
 let elevenlabsInstance: ElevenLabsClient | null = null;
@@ -30,7 +28,6 @@ export interface TranscriptionResult {
   words?: WordItem[];
 }
 
-
 /**
  * Core transcription function that is platform-independent
  * @param fileData - The audio/video file data as Uint8Array
@@ -41,7 +38,7 @@ export interface TranscriptionResult {
 export async function transcribeCore(
   fileData: Uint8Array,
   mimeType: string,
-  options: TranscriptionOptions
+  options: TranscriptionOptions,
 ): Promise<TranscriptionResult> {
   console.log("Calling ElevenLabs API with options:", options);
   console.log(`File size: ${fileData.length} bytes, MIME type: ${mimeType}`);
@@ -51,17 +48,25 @@ export async function transcribeCore(
   const fileBlob = new Blob([new Uint8Array(fileData)], { type: mimeType });
 
   // Determine filename extension based on MIME type
-  const extension = mimeType === "audio/wav" ? "wav" :
-                    mimeType === "audio/mpeg" ? "mp3" :
-                    mimeType === "audio/mp4" ? "m4a" :
-                    mimeType === "audio/ogg" ? "ogg" :
-                    mimeType === "audio/flac" ? "flac" : "audio";
+  const extension = mimeType === "audio/wav"
+    ? "wav"
+    : mimeType === "audio/mpeg"
+    ? "mp3"
+    : mimeType === "audio/mp4"
+    ? "m4a"
+    : mimeType === "audio/ogg"
+    ? "ogg"
+    : mimeType === "audio/flac"
+    ? "flac"
+    : "audio";
   const filename = `audio.${extension}`;
 
   // Create File object with filename (important for ElevenLabs API)
   const file = new File([fileBlob], filename, { type: mimeType });
 
-  console.log(`Sending to ElevenLabs: filename=${filename}, type=${mimeType}, size=${file.size}`);
+  console.log(
+    `Sending to ElevenLabs: filename=${filename}, type=${mimeType}, size=${file.size}`,
+  );
 
   // Call ElevenLabs API
   const scribeResult = await getElevenLabsClient().speechToText.convert({
@@ -69,51 +74,38 @@ export async function transcribeCore(
     model_id: "scribe_v2",
     tag_audio_events: options.tagAudioEvents,
     diarize: options.diarize,
-    ...(options.diarize && options.numSpeakers ? { num_speakers: options.numSpeakers } : {}),
+    ...(options.diarize && options.numSpeakers
+      ? { num_speakers: options.numSpeakers }
+      : {}),
   }, { timeoutInSeconds: 3600 });
 
-  const words: WordItem[] | undefined = (scribeResult as { words?: WordItem[] }).words;
+  const words: WordItem[] | undefined =
+    (scribeResult as { words?: WordItem[] }).words;
   let transcript = "";
 
-  // Process transcription based on options
-  if (options.diarize && Array.isArray(words) && words.length > 0) {
-    const grouped = groupBySpeaker(words);
-    transcript = grouped
-      .map((u) => {
-        const speakerLabel = typeof u.speaker === "number"
-          ? `speaker_${u.speaker}`
-          : `${u.speaker}`;
-        // Add line breaks after sentence-ending punctuation for readability
-        // Use two trailing spaces before newline for Markdown line break compatibility
-        const formattedText = u.text.trim().replace(/([。！？.!?])\s*/g, "$1  \n");
-        if (options.showTimestamp) {
-          return `${formatTimestamp(u.start)} ${speakerLabel}: ${formattedText}`;
-        } else {
-          return `${speakerLabel}: ${formattedText}`;
-        }
-      })
-      .join("\n");
-  } else if (!options.diarize && Array.isArray(words) && words.length > 0) {
-    const sentences = extractSentences(words);
-    transcript = sentences
-      .map((s) => {
-        if (options.showTimestamp) {
-          return `${formatTimestamp(s.start)} ${s.text}`;
-        } else {
-          return s.text;
-        }
-      })
-      .join("\n");
+  // Process transcription from word-level timestamps. Speaker labels are optional
+  // metadata on top of the same segmentation rules.
+  if (Array.isArray(words) && words.length > 0) {
+    const segments = segmentWords(words, {
+      splitOnSpeakerChange: options.diarize,
+    });
+    transcript = formatTranscriptSegments(segments, options);
   } else {
     const plain = (scribeResult.text || "").trim();
     transcript = plain.replace(/([。.!！?？])\s*/g, "$1\n").trim();
   }
 
   // Apply speaker name mapping if provided
-  if (options.diarize && options.speakerNames && options.speakerNames.length > 0 && transcript) {
+  if (
+    options.diarize && options.speakerNames &&
+    options.speakerNames.length > 0 && transcript
+  ) {
     try {
       console.log("Identifying speakers with names:", options.speakerNames);
-      const speakerMapping = await identifySpeakers(transcript, options.speakerNames);
+      const speakerMapping = await identifySpeakers(
+        transcript,
+        options.speakerNames,
+      );
       transcript = replaceSpeakerLabels(transcript, speakerMapping);
       console.log("Speaker labels replaced successfully");
     } catch (error) {
@@ -122,7 +114,8 @@ export async function transcribeCore(
     }
   }
 
-  const languageCode = (scribeResult as { language_code?: string }).language_code || null;
+  const languageCode =
+    (scribeResult as { language_code?: string }).language_code || null;
 
   return {
     transcript,
@@ -162,18 +155,22 @@ export function getMimeTypeFromExtension(extension: string): string {
 export async function transcribeFile(
   filePath: string,
   options: TranscriptionOptions,
-  mimeType?: string
+  mimeType?: string,
 ): Promise<TranscriptionResult> {
   let processedFilePath = filePath;
   let audioFilePath: string | null = null;
 
   try {
     // Determine MIME type: use provided mimeType, or infer from extension
-    const extension = filePath.split('.').pop()?.toLowerCase() || '';
+    const extension = filePath.split(".").pop()?.toLowerCase() || "";
     const effectiveMimeType = mimeType || getMimeTypeFromExtension(extension);
 
     console.log(`Processing file: ${filePath}`);
-    console.log(`MIME type: ${effectiveMimeType} (provided: ${mimeType || 'none, inferred from extension'})`);
+    console.log(
+      `MIME type: ${effectiveMimeType} (provided: ${
+        mimeType || "none, inferred from extension"
+      })`,
+    );
 
     // Check if the file is a video and convert to audio if needed
     if (isVideoFile(effectiveMimeType)) {
