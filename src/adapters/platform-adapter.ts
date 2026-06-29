@@ -1,7 +1,13 @@
 import { TranscriptionOptions } from "../core/types.ts";
 import { formatOptionsText } from "../services/file-processor.ts";
 import { sendSlackMessage, uploadTranscriptToSlack, downloadSlackFileToPath } from "../clients/slack.ts";
-import { editInteractionReply, sendDiscordMessage, uploadTranscriptToDiscord, downloadDiscordFile } from "../clients/discord.ts";
+import {
+  editInteractionReply,
+  sendDiscordMessage,
+  uploadTranscriptToDiscord,
+  downloadDiscordFile,
+  isUnknownWebhookError,
+} from "../clients/discord.ts";
 import { getUsageMessage } from "../utils/messages.ts";
 import {
   buildSummaryBlocks,
@@ -87,16 +93,17 @@ export class SlackAdapter implements PlatformAdapter {
 
 export class DiscordAdapter implements PlatformAdapter {
   constructor(
-    private interaction: APIInteraction
+    private interaction: APIInteraction,
+    private channelId: string,
   ) {}
 
   async sendStatusMessage(message: string): Promise<void> {
-    await editInteractionReply(this.interaction.token, message);
+    await this.editInteractionReplyOrSendToChannel(message);
   }
 
   async sendErrorMessage(error: string, hint?: string): Promise<void> {
     const message = hint ? `⚠️ ${error}\n${hint}` : `⚠️ ${error}`;
-    await editInteractionReply(this.interaction.token, message);
+    await this.editInteractionReplyOrSendToChannel(message);
   }
 
   async sendUsageMessage(): Promise<void> {
@@ -108,22 +115,45 @@ export class DiscordAdapter implements PlatformAdapter {
   }
 
   async uploadTranscript(transcript: string, _filename?: string): Promise<void> {
-    const channelId = this.interaction.channel?.id || "";
-    await uploadTranscriptToDiscord(transcript, channelId);
+    await uploadTranscriptToDiscord(transcript, this.channelId);
   }
 
   async sendSummary(summary: string, context?: SummaryContext): Promise<void> {
-    const channelId = this.interaction.channel?.id || "";
     const header = context?.filename
       ? `📝 **"${context.filename}" の要約**`
       : "📝 **文字起こし要約**";
-    await sendDiscordMessage(channelId, `${header}\n\n${summary}`);
+    await sendDiscordMessage(this.channelId, `${header}\n\n${summary}`);
   }
 
   async downloadFile(fileURL: string, filePath: string): Promise<void> {
     // Discord returns Uint8Array, so we need to write it to file
     const fileData = await downloadDiscordFile(fileURL);
     await Deno.writeFile(filePath, fileData);
+  }
+
+  private async editInteractionReplyOrSendToChannel(
+    message: string,
+  ): Promise<void> {
+    try {
+      await editInteractionReply(
+        this.interaction.application_id,
+        this.interaction.token,
+        message,
+      );
+    } catch (error) {
+      if (!isUnknownWebhookError(error)) {
+        throw error;
+      }
+
+      if (!this.channelId) {
+        throw error;
+      }
+
+      console.warn(
+        "Discord interaction webhook expired; sending message to channel instead.",
+      );
+      await sendDiscordMessage(this.channelId, message);
+    }
   }
 }
 
@@ -139,7 +169,7 @@ export function createPlatformAdapter(
     if (!context.interaction) {
       throw new Error("Discord adapter requires interaction");
     }
-    return new DiscordAdapter(context.interaction);
+    return new DiscordAdapter(context.interaction, context.channelId);
   } else {
     if (!context.threadTimestamp) {
       throw new Error("Slack adapter requires threadTimestamp");
