@@ -93,7 +93,8 @@ export class SlackAdapter implements PlatformAdapter {
 
 export class DiscordAdapter implements PlatformAdapter {
   constructor(
-    private interaction: APIInteraction
+    private interaction: APIInteraction,
+    private channelId: string,
   ) {}
 
   async sendStatusMessage(message: string): Promise<void> {
@@ -114,16 +115,14 @@ export class DiscordAdapter implements PlatformAdapter {
   }
 
   async uploadTranscript(transcript: string, _filename?: string): Promise<void> {
-    const channelId = this.interaction.channel?.id || "";
-    await uploadTranscriptToDiscord(transcript, channelId);
+    await uploadTranscriptToDiscord(transcript, this.channelId);
   }
 
   async sendSummary(summary: string, context?: SummaryContext): Promise<void> {
-    const channelId = this.interaction.channel?.id || "";
     const header = context?.filename
       ? `📝 **"${context.filename}" の要約**`
       : "📝 **文字起こし要約**";
-    await sendDiscordMessage(channelId, `${header}\n\n${summary}`);
+    await sendDiscordMessage(this.channelId, `${header}\n\n${summary}`);
   }
 
   async downloadFile(fileURL: string, filePath: string): Promise<void> {
@@ -146,15 +145,14 @@ export class DiscordAdapter implements PlatformAdapter {
         throw error;
       }
 
-      const channelId = this.interaction.channel?.id || "";
-      if (!channelId) {
+      if (!this.channelId) {
         throw error;
       }
 
       console.warn(
         "Discord interaction webhook expired; sending message to channel instead.",
       );
-      await sendDiscordMessage(channelId, message);
+      await sendDiscordMessage(this.channelId, message);
     }
   }
 }
@@ -171,7 +169,7 @@ export function createPlatformAdapter(
     if (!context.interaction) {
       throw new Error("Discord adapter requires interaction");
     }
-    return new DiscordAdapter(context.interaction);
+    return new DiscordAdapter(context.interaction, context.channelId);
   } else {
     if (!context.threadTimestamp) {
       throw new Error("Slack adapter requires threadTimestamp");
