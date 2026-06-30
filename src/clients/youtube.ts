@@ -229,7 +229,10 @@ function getVideoFormatSelector(url: string): string {
     return "view_with_share/view/best";
   }
 
-  return "b[ext=mp4][protocol^=http]/bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b";
+  // 分離ストリーム（高解像度の映像 + 音声）をマージするのを最優先にする。
+  // progressive な単一ファイル mp4（YouTube では itag 18 = 360p）を先頭に置くと
+  // 常に 360p が選ばれてしまうため、フォールバックに回す。
+  return "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b[ext=mp4][protocol^=http]/b[ext=mp4]/b";
 }
 
 // Errors that typically resolve on retry (bot detection on the proxy IP,
