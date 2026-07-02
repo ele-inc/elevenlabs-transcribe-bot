@@ -7,7 +7,7 @@ function getGeminiClient(): GoogleGenerativeAI {
     const apiKey = Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY");
     if (!apiKey) {
       throw new Error(
-        "GOOGLE_GENERATIVE_AI_API_KEY is not set in environment variables"
+        "GOOGLE_GENERATIVE_AI_API_KEY is not set in environment variables",
       );
     }
     geminiClient = new GoogleGenerativeAI(apiKey);
@@ -15,37 +15,45 @@ function getGeminiClient(): GoogleGenerativeAI {
   return geminiClient;
 }
 
-const MODEL_NAME = "gemini-3-flash-preview";
+const DEFAULT_MODEL_NAME = "gemini-3.5-flash";
+
+function getGeminiModelName(): string {
+  return Deno.env.get("GEMINI_MODEL")?.trim() || DEFAULT_MODEL_NAME;
+}
 
 export async function identifySpeakers(
   transcript: string,
-  speakerNames: string[]
+  speakerNames: string[],
 ): Promise<Map<string, string>> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({
-    model: MODEL_NAME,
+    model: getGeminiModelName(),
     generationConfig: {
       responseMimeType: "application/json",
     },
   });
 
   const detectedLabels = extractSpeakerLabels(transcript);
-  const labelsToMap =
-    detectedLabels.length > 0 ? detectedLabels : ["speaker_0", "speaker_1"];
+  const labelsToMap = detectedLabels.length > 0
+    ? detectedLabels
+    : ["speaker_0", "speaker_1"];
 
   const speakerListString = speakerNames.join(", ");
   const labelsListString = labelsToMap.join(", ");
 
   const exampleJson = `{
-${labelsToMap
-  .map((l) => `  "${l}": "（ここに候補リストから選んだ名前）"`)
-  .join(",\n")}
+${
+    labelsToMap
+      .map((l) => `  "${l}": "（ここに候補リストから選んだ名前）"`)
+      .join(",\n")
+  }
 }`;
 
   const systemInstruction =
     "あなたは、与えられた「話者候補リスト」に厳密に従って、文字起こしから話者を特定する専門家です。候補リストにない名前は絶対に使用してはいけません。";
 
-  const prompt = `以下の文字起こし結果と話者候補リストを分析し、各話者ラベルが誰なのかを特定してください。
+  const prompt =
+    `以下の文字起こし結果と話者候補リストを分析し、各話者ラベルが誰なのかを特定してください。
 
 # 話者候補リスト
 ${speakerNames.map((name) => `- ${name}`).join("\n")}
@@ -82,7 +90,7 @@ ${exampleJson}
       .filter(
         (label) =>
           typeof rawMapping[label] === "string" &&
-          rawMapping[label].trim().length > 0
+          rawMapping[label].trim().length > 0,
       )
       .map((label) => [label, rawMapping[label].trim()]);
 
@@ -95,12 +103,12 @@ ${exampleJson}
 
 export function replaceSpeakerLabels(
   transcript: string,
-  speakerMapping: Map<string, string>
+  speakerMapping: Map<string, string>,
 ): string {
   let result = transcript;
 
   const sortedEntries = Array.from(speakerMapping.entries()).sort(
-    (a, b) => b[0].length - a[0].length
+    (a, b) => b[0].length - a[0].length,
   );
 
   for (const [speakerLabel, name] of sortedEntries) {
@@ -128,12 +136,13 @@ function escapeRegExp(input: string): string {
 
 export async function summarizeTranscript(transcript: string): Promise<string> {
   const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: MODEL_NAME });
+  const model = client.getGenerativeModel({ model: getGeminiModelName() });
 
   const systemInstruction =
     "あなたは会議や打ち合わせの要点を簡潔にまとめる日本語アシスタントです。重要事項を漏れなく整理します。";
 
-  const prompt = `以下の文字起こしを読み、重要なポイントを日本語要約してください。
+  const prompt =
+    `以下の文字起こしを読み、重要なポイントを日本語要約してください。
 
 # 出力要件
 - 具体的な数値や決定事項があれば含めてください。

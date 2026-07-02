@@ -28,7 +28,7 @@ steps:
         done
         mapping="$${mapping%,}"
 
-        RUNTIME_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8"
+        RUNTIME_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8,GEMINI_MODEL=gemini-3.5-flash"
 
         gcloud run deploy scribe-bot \
           --project="$PROJECT_ID" \

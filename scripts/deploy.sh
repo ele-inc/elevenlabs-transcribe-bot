@@ -5,6 +5,7 @@ PROJECT_ID="automatic-recording-of-minutes"
 REGION="asia-northeast1"
 SERVICE="scribe-bot"
 MAX_CONCURRENT_TRANSCRIPTIONS="8"
+GEMINI_MODEL="gemini-3.5-flash"
 
 SECRETS=(
   ELEVENLABS_API_KEY
@@ -62,7 +63,7 @@ gcloud run deploy "$SERVICE" \
   --min-instances=0 \
   --max-instances=1 \
   --port=8080 \
-  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS" \
+  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS,GEMINI_MODEL=$GEMINI_MODEL" \
   --set-secrets="$mapping"
 
 echo "✅ Deployed"

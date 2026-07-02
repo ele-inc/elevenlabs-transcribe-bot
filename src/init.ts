@@ -49,6 +49,7 @@ export async function runInit(envPath: string): Promise<void> {
 
   const lines = [
     `ELEVENLABS_API_KEY=${escapeEnvValue(elevenlabs)}`,
+    "GEMINI_MODEL=gemini-3.5-flash",
   ];
   if (gemini) {
     lines.push(`GOOGLE_GENERATIVE_AI_API_KEY=${escapeEnvValue(gemini)}`);
