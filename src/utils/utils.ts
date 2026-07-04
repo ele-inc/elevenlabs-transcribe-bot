@@ -230,28 +230,39 @@ export const extractGoogleDriveUrls = (text: string): string[] => {
   return urls.filter((url) => isGoogleDriveUrl(url));
 };
 
+export interface AudioConversionResult {
+  path: string;
+  mimeType: "audio/flac" | "audio/mp4";
+}
+
 /**
- * 動画ファイルから音声(AAC/m4a)を抽出する
+ * 動画ファイルから音声を抽出する
  * Cloud Run等のコンテナ環境向けに最適化済み
  *
- * 以前は非圧縮WAV(PCM)だったが、1時間で約115MBとなり
- * tmpfs(メモリ)とアップロード時間を圧迫するためAAC 64kbpsへ変更（約1/4）。
- * ElevenLabs Scribeは圧縮音声も受け付け、16kHz mono 64kbpsで認識精度は変わらない。
- * * @param inputPath 入力動画ファイルのパス
- * @returns 変換された音声ファイルのパス
+ * 以前は非圧縮WAV(PCM)で1時間あたり約115MBとなり、tmpfs(メモリ)と
+ * アップロード時間を圧迫していたため圧縮形式へ変更。形式は用途で分岐:
+ * - lossless=true（話者識別あり・デフォルト）: FLAC。可逆圧縮のため
+ *   WAVとサンプル単位で同一＝話者識別精度への影響ゼロで、サイズ約1/2
+ *   （WAVは話者識別精度のために採用された経緯があり、非可逆圧縮を避ける）
+ * - lossless=false（話者識別なし）: AAC 64kbps。文字起こしのみなら
+ *   十分な品質で、サイズ約1/4
+ *
+ * @param inputPath 入力動画ファイルのパス
+ * @param lossless 可逆圧縮(FLAC)を使うか。話者識別を行う場合はtrue推奨
+ * @returns 変換された音声ファイルのパスとMIMEタイプ
  */
 export const convertVideoToAudio = async (
   inputPath: string,
-): Promise<string> => {
+  lossless = true,
+): Promise<AudioConversionResult> => {
   // 一時ディレクトリを作成
   const outputDir = await Deno.makeTempDir();
 
   try {
     // ファイル名生成（パス操作を少し堅牢に）
     const fileName = inputPath.split(/[/\\]/).pop() ?? "audio";
-    // 拡張子(.mp4など)を除去して .m4a を付与
     const baseName = fileName.replace(/\.[^/.]+$/, "");
-    const outputPath = `${outputDir}/${baseName}.m4a`;
+    const outputPath = `${outputDir}/${baseName}.${lossless ? "flac" : "m4a"}`;
 
     console.log(`Converting video to audio: ${inputPath} -> ${outputPath}`);
 
@@ -278,10 +289,9 @@ export const convertVideoToAudio = async (
         "pan=mono|c0=0.5*c0+0.5*c1,highpass=f=60,aresample=resampler=swr",
         "-ar",
         "16000", // 16kHz
-        "-c:a",
-        "aac",
-        "-b:a",
-        "64k", // 音声認識用途には十分な品質で、WAV比で約1/4のサイズ
+        ...(lossless
+          ? ["-c:a", "flac"] // 可逆圧縮（WAVと同一サンプル・約1/2サイズ）
+          : ["-c:a", "aac", "-b:a", "64k"]), // 文字起こしのみなら十分・約1/4サイズ
         outputPath,
       ],
       stdout: "null", // 標準出力は捨てる（メモリ節約・安定化）
@@ -301,7 +311,10 @@ export const convertVideoToAudio = async (
     }
 
     console.log(`Audio extraction completed: ${outputPath}`);
-    return outputPath;
+    return {
+      path: outputPath,
+      mimeType: lossless ? "audio/flac" : "audio/mp4",
+    };
   } catch (error) {
     // エラー時は一時フォルダを掃除
     await Deno.remove(outputDir, { recursive: true }).catch(() => {});

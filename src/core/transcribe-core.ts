@@ -160,6 +160,7 @@ export async function transcribeFile(
 ): Promise<TranscriptionResult> {
   let processedFilePath = filePath;
   let audioFilePath: string | null = null;
+  let convertedMimeType: string | null = null;
 
   try {
     // Determine MIME type: use provided mimeType, or infer from extension
@@ -176,7 +177,14 @@ export async function transcribeFile(
     // Check if the file is a video and convert to audio if needed
     if (isVideoFile(effectiveMimeType)) {
       console.log("Detected video file, converting to audio...");
-      audioFilePath = await convertVideoToAudio(filePath);
+      // 話者識別を行う場合は可逆圧縮(FLAC)で音質を維持し、
+      // 行わない場合はAACでサイズを最小化する
+      const converted = await convertVideoToAudio(
+        filePath,
+        options.diarize !== false,
+      );
+      audioFilePath = converted.path;
+      convertedMimeType = converted.mimeType;
       processedFilePath = audioFilePath;
       console.log("Conversion complete:", audioFilePath);
     }
@@ -184,8 +192,7 @@ export async function transcribeFile(
     // Read the processed file (original audio or converted audio)
     const fileData = await Deno.readFile(processedFilePath);
 
-    // Use audio/mp4 for converted files (our ffmpeg outputs AAC/m4a)
-    const finalMimeType = audioFilePath ? "audio/mp4" : effectiveMimeType;
+    const finalMimeType = convertedMimeType ?? effectiveMimeType;
 
     // Call the core transcription function
     const result = await transcribeCore(fileData, finalMimeType, options);
