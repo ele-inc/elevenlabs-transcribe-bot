@@ -36,7 +36,7 @@ export interface TranscriptionResult {
  * @returns Transcription result
  */
 export async function transcribeCore(
-  fileData: Uint8Array,
+  fileData: Uint8Array<ArrayBuffer>,
   mimeType: string,
   options: TranscriptionOptions,
 ): Promise<TranscriptionResult> {
@@ -44,8 +44,9 @@ export async function transcribeCore(
   console.log(`File size: ${fileData.length} bytes, MIME type: ${mimeType}`);
 
   // Create blob from file data with explicit MIME type
-  // After video conversion, mimeType should be audio/wav
-  const fileBlob = new Blob([new Uint8Array(fileData)], { type: mimeType });
+  // After video conversion, mimeType should be audio/mp4 (m4a)
+  // NOTE: fileDataを直接渡す（コピーするとピークメモリがファイルサイズ分増える）
+  const fileBlob = new Blob([fileData], { type: mimeType });
 
   // Determine filename extension based on MIME type
   const extension = mimeType === "audio/wav"
@@ -159,6 +160,7 @@ export async function transcribeFile(
 ): Promise<TranscriptionResult> {
   let processedFilePath = filePath;
   let audioFilePath: string | null = null;
+  let convertedMimeType: string | null = null;
 
   try {
     // Determine MIME type: use provided mimeType, or infer from extension
@@ -175,7 +177,14 @@ export async function transcribeFile(
     // Check if the file is a video and convert to audio if needed
     if (isVideoFile(effectiveMimeType)) {
       console.log("Detected video file, converting to audio...");
-      audioFilePath = await convertVideoToAudio(filePath);
+      // 話者識別を行う場合は可逆圧縮(FLAC)で音質を維持し、
+      // 行わない場合はAACでサイズを最小化する
+      const converted = await convertVideoToAudio(
+        filePath,
+        options.diarize !== false,
+      );
+      audioFilePath = converted.path;
+      convertedMimeType = converted.mimeType;
       processedFilePath = audioFilePath;
       console.log("Conversion complete:", audioFilePath);
     }
@@ -183,8 +192,7 @@ export async function transcribeFile(
     // Read the processed file (original audio or converted audio)
     const fileData = await Deno.readFile(processedFilePath);
 
-    // Use audio/wav for converted files (our ffmpeg outputs WAV)
-    const finalMimeType = audioFilePath ? "audio/wav" : effectiveMimeType;
+    const finalMimeType = convertedMimeType ?? effectiveMimeType;
 
     // Call the core transcription function
     const result = await transcribeCore(fileData, finalMimeType, options);

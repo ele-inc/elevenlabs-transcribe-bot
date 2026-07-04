@@ -67,6 +67,27 @@ interface CliOptions extends TranscriptionOptions {
 }
 
 /**
+ * 文字起こし結果をstdoutへ出力する（ログのリダイレクト対象外）。
+ * stdoutを結果専用にすることで `scribe file.mp4 --no-save -f json | jq` のような
+ * パイプ利用や、プログラムからの `JSON.parse(stdout)` を可能にする。
+ */
+function printResult(text: string): void {
+  const bytes = new TextEncoder().encode(text + "\n");
+  // writeSyncは部分書き込みがあり得る（特にパイプ先+大きなJSON）ため、
+  // 全バイト書き切るまでループする
+  let written = 0;
+  while (written < bytes.length) {
+    written += Deno.stdout.writeSync(bytes.subarray(written));
+  }
+}
+
+/** 進捗・診断ログをすべてstderrへ向ける（stdoutは結果専用にする） */
+function redirectLogsToStderr(): void {
+  console.log = (...args: unknown[]) => console.error(...args);
+  console.info = (...args: unknown[]) => console.error(...args);
+}
+
+/**
  * Parse command line arguments
  */
 function parseArgs(): { filePath: string; options: CliOptions } {
@@ -271,6 +292,9 @@ async function main() {
     return;
   }
 
+  // ここから先（文字起こし処理）はログをstderrへ。stdoutは結果専用
+  redirectLogsToStderr();
+
   await loadEnvFromKnownLocations();
 
   let tempFilePath: string | undefined;
@@ -403,7 +427,7 @@ async function main() {
         await Deno.writeTextFile(outputPath, jsonString);
         console.log(`\nTranscription saved to: ${outputPath}`);
       } else {
-        console.log(jsonString);
+        printResult(jsonString);
       }
     } else {
       // Text format
@@ -411,7 +435,7 @@ async function main() {
         await Deno.writeTextFile(outputPath, finalTranscript);
         console.log(`\nTranscription saved to: ${outputPath}`);
       } else {
-        console.log("\n" + finalTranscript);
+        printResult("\n" + finalTranscript);
       }
     }
 
