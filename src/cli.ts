@@ -72,7 +72,13 @@ interface CliOptions extends TranscriptionOptions {
  * パイプ利用や、プログラムからの `JSON.parse(stdout)` を可能にする。
  */
 function printResult(text: string): void {
-  Deno.stdout.writeSync(new TextEncoder().encode(text + "\n"));
+  const bytes = new TextEncoder().encode(text + "\n");
+  // writeSyncは部分書き込みがあり得る（特にパイプ先+大きなJSON）ため、
+  // 全バイト書き切るまでループする
+  let written = 0;
+  while (written < bytes.length) {
+    written += Deno.stdout.writeSync(bytes.subarray(written));
+  }
 }
 
 /** 進捗・診断ログをすべてstderrへ向ける（stdoutは結果専用にする） */
