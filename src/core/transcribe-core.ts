@@ -36,7 +36,7 @@ export interface TranscriptionResult {
  * @returns Transcription result
  */
 export async function transcribeCore(
-  fileData: Uint8Array,
+  fileData: Uint8Array<ArrayBuffer>,
   mimeType: string,
   options: TranscriptionOptions,
 ): Promise<TranscriptionResult> {
@@ -44,8 +44,9 @@ export async function transcribeCore(
   console.log(`File size: ${fileData.length} bytes, MIME type: ${mimeType}`);
 
   // Create blob from file data with explicit MIME type
-  // After video conversion, mimeType should be audio/wav
-  const fileBlob = new Blob([new Uint8Array(fileData)], { type: mimeType });
+  // After video conversion, mimeType should be audio/mp4 (m4a)
+  // NOTE: fileDataを直接渡す（コピーするとピークメモリがファイルサイズ分増える）
+  const fileBlob = new Blob([fileData], { type: mimeType });
 
   // Determine filename extension based on MIME type
   const extension = mimeType === "audio/wav"
@@ -183,8 +184,8 @@ export async function transcribeFile(
     // Read the processed file (original audio or converted audio)
     const fileData = await Deno.readFile(processedFilePath);
 
-    // Use audio/wav for converted files (our ffmpeg outputs WAV)
-    const finalMimeType = audioFilePath ? "audio/wav" : effectiveMimeType;
+    // Use audio/mp4 for converted files (our ffmpeg outputs AAC/m4a)
+    const finalMimeType = audioFilePath ? "audio/mp4" : effectiveMimeType;
 
     // Call the core transcription function
     const result = await transcribeCore(fileData, finalMimeType, options);

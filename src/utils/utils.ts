@@ -231,8 +231,12 @@ export const extractGoogleDriveUrls = (text: string): string[] => {
 };
 
 /**
- * 動画ファイルから音声(WAV)を抽出する
+ * 動画ファイルから音声(AAC/m4a)を抽出する
  * Cloud Run等のコンテナ環境向けに最適化済み
+ *
+ * 以前は非圧縮WAV(PCM)だったが、1時間で約115MBとなり
+ * tmpfs(メモリ)とアップロード時間を圧迫するためAAC 64kbpsへ変更（約1/4）。
+ * ElevenLabs Scribeは圧縮音声も受け付け、16kHz mono 64kbpsで認識精度は変わらない。
  * * @param inputPath 入力動画ファイルのパス
  * @returns 変換された音声ファイルのパス
  */
@@ -245,9 +249,9 @@ export const convertVideoToAudio = async (
   try {
     // ファイル名生成（パス操作を少し堅牢に）
     const fileName = inputPath.split(/[/\\]/).pop() ?? "audio";
-    // 拡張子(.mp4など)を除去して .wav を付与
+    // 拡張子(.mp4など)を除去して .m4a を付与
     const baseName = fileName.replace(/\.[^/.]+$/, "");
-    const outputPath = `${outputDir}/${baseName}.wav`;
+    const outputPath = `${outputDir}/${baseName}.m4a`;
 
     console.log(`Converting video to audio: ${inputPath} -> ${outputPath}`);
 
@@ -275,7 +279,9 @@ export const convertVideoToAudio = async (
         "-ar",
         "16000", // 16kHz
         "-c:a",
-        "pcm_s16le", // 音質劣化のないWAV形式
+        "aac",
+        "-b:a",
+        "64k", // 音声認識用途には十分な品質で、WAV比で約1/4のサイズ
         outputPath,
       ],
       stdout: "null", // 標準出力は捨てる（メモリ節約・安定化）
