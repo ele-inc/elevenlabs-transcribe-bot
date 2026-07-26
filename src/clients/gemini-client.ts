@@ -15,7 +15,7 @@ function getGeminiClient(): GoogleGenerativeAI {
   return geminiClient;
 }
 
-const DEFAULT_MODEL_NAME = "gemini-3.5-flash";
+const DEFAULT_MODEL_NAME = "gemini-3.6-flash";
 
 function getGeminiModelName(): string {
   return Deno.env.get("GEMINI_MODEL")?.trim() || DEFAULT_MODEL_NAME;

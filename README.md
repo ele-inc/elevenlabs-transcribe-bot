@@ -88,7 +88,7 @@ DISCORD_PUBLIC_KEY="your-discord-public-key"
 DISCORD_BOT_TOKEN="your-discord-bot-token"
 GOOGLE_SERVICE_ACCOUNT_KEY='{"type":"service_account","project_id":"..."}'  # Google サービスアカウント JSON
 GOOGLE_GENERATIVE_AI_API_KEY="your-google-generative-ai-api-key"
-GEMINI_MODEL="gemini-3.5-flash"
+GEMINI_MODEL="gemini-3.6-flash"
 
 # YouTube cookies（オプション、一部の動画で必要）
 # Cloud Run 用：cookies ファイル内容を Base64 エンコードしたもの

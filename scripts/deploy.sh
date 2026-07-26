@@ -5,7 +5,7 @@ PROJECT_ID="automatic-recording-of-minutes"
 REGION="asia-northeast1"
 SERVICE="scribe-bot"
 MAX_CONCURRENT_TRANSCRIPTIONS="8"
-GEMINI_MODEL="gemini-3.5-flash"
+GEMINI_MODEL="gemini-3.6-flash"
 
 SECRETS=(
   ELEVENLABS_API_KEY
