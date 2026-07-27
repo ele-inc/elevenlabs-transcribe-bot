@@ -8,6 +8,7 @@ import {
   CloudDownloadResult,
   CloudService,
   cloudServiceRegistry,
+  resolveCloudFileMetadata,
 } from "./cloud-service.ts";
 import { GoogleDriveAdapter } from "../adapters/google-drive-adapter.ts";
 import { TempFileManager } from "./temp-file-manager.ts";
@@ -17,6 +18,7 @@ import { HlsAdapter } from "../adapters/hls-adapter.ts";
 import { UtageAdapter } from "../adapters/utage-adapter.ts";
 import { VimeoReviewAdapter } from "../adapters/vimeo-review-adapter.ts";
 import { getErrorMessage } from "../utils/errors.ts";
+import { elapsedMs, logPerformance } from "../utils/performance.ts";
 
 export class CloudServiceManager {
   private tempManager = new TempFileManager();
@@ -95,7 +97,9 @@ export class CloudServiceManager {
 
     try {
       // Get metadata first to determine file extension
-      const metadata = await service.getFileMetadata(fileId, opts);
+      const metadataStartedAt = performance.now();
+      const metadata = await resolveCloudFileMetadata(service, fileId, opts);
+      const metadataMs = elapsedMs(metadataStartedAt);
 
       // Determine extension from metadata filename or mimeType
       let extension = "tmp";
@@ -123,7 +127,21 @@ export class CloudServiceManager {
       );
 
       // Download file
-      const downloaded = await service.downloadFile(fileId, tempPath, opts);
+      const downloadStartedAt = performance.now();
+      const downloaded = await service.downloadFile(fileId, tempPath, {
+        ...opts,
+        metadata,
+      });
+      const downloadMs = elapsedMs(downloadStartedAt);
+
+      logPerformance("cloud_download", {
+        performanceId: opts?.performanceId,
+        service: service.name,
+        metadataCacheHit: opts?.metadata !== undefined,
+        metadataMs,
+        downloadMs,
+        sourceBytes: metadata.size,
+      });
 
       if (!downloaded) {
         // File was skipped (non-media)
@@ -152,6 +170,13 @@ export class CloudServiceManager {
    */
   async cleanup(): Promise<void> {
     await this.tempManager.cleanupAll();
+  }
+
+  /**
+   * Clean up one completed download without touching concurrent requests.
+   */
+  async cleanupDownloadedFile(tempPath: string): Promise<void> {
+    await this.tempManager.cleanupFileAndDir(tempPath);
   }
 
   /**

@@ -5,7 +5,7 @@ import {
   editInteractionReply,
   sendDiscordMessage,
   uploadTranscriptToDiscord,
-  downloadDiscordFile,
+  downloadDiscordFileToPath,
   isUnknownWebhookError,
 } from "../clients/discord.ts";
 import { getUsageMessage } from "../utils/messages.ts";
@@ -126,9 +126,7 @@ export class DiscordAdapter implements PlatformAdapter {
   }
 
   async downloadFile(fileURL: string, filePath: string): Promise<void> {
-    // Discord returns Uint8Array, so we need to write it to file
-    const fileData = await downloadDiscordFile(fileURL);
-    await Deno.writeFile(filePath, fileData);
+    await downloadDiscordFileToPath(fileURL, filePath);
   }
 
   private async editInteractionReplyOrSendToChannel(

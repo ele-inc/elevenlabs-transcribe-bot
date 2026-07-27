@@ -12,11 +12,14 @@ import {
   processCloudFile,
 } from "./file-processor.ts";
 import { PlatformAdapter } from "../adapters/platform-adapter.ts";
-import { getFileExtensionFromMime, resolveMediaMimeType } from "../utils/utils.ts";
-import { cloudServiceManager } from "./cloud-service-manager.ts";
-import { cloudServiceRegistry } from "./cloud-service.ts";
+import { resolveMediaMimeType } from "../utils/utils.ts";
+import {
+  type CloudFileMetadata,
+  cloudServiceRegistry,
+} from "./cloud-service.ts";
 import { getErrorMessage } from "../utils/errors.ts";
 import { acquireSlot, activeCount, isAtCapacity, ShuttingDownError } from "./concurrency-limiter.ts";
+import { elapsedMs, logPerformance } from "../utils/performance.ts";
 
 export interface FileAttachment {
   url: string;
@@ -54,11 +57,15 @@ export class TranscriptionProcessor {
     }
 
     // Check all URLs to see if any are media files
-    const mediaUrls: string[] = [];
-    const nonMediaUrls: string[] = [];
+    const mediaFiles: Array<{
+      url: string;
+      performanceId: string;
+      metadata?: CloudFileMetadata;
+    }> = [];
     let hasGoogleDocs = false;
 
     for (const url of cloudUrls) {
+      const performanceId = crypto.randomUUID();
       const service = cloudServiceRegistry.getServiceForUrl(url);
       if (!service) {
         continue;
@@ -70,11 +77,16 @@ export class TranscriptionProcessor {
       }
 
       try {
+        const metadataStartedAt = performance.now();
         const metadata = await service.getFileMetadata(fileId, downloadOpts);
+        logPerformance("cloud_metadata", {
+          performanceId,
+          service: service.name,
+          metadataMs: elapsedMs(metadataStartedAt),
+        });
         if (service.isMediaFile(metadata.mimeType)) {
-          mediaUrls.push(url);
+          mediaFiles.push({ url, performanceId, metadata });
         } else {
-          nonMediaUrls.push(url);
           // Check if it's a Google Docs file
           const googleDocsTypes = [
             "application/vnd.google-apps.document",
@@ -94,12 +106,12 @@ export class TranscriptionProcessor {
       } catch (error) {
         console.error(`Error getting metadata for ${url}:`, error);
         // If we can't get metadata, try to process it anyway
-        mediaUrls.push(url);
+        mediaFiles.push({ url, performanceId });
       }
     }
 
     // If no media files and only Google Docs URLs, send error message
-    if (mediaUrls.length === 0 && hasGoogleDocs) {
+    if (mediaFiles.length === 0 && hasGoogleDocs) {
       await this.adapter.sendErrorMessage(
         "音声または動画ファイルを指定してください。GoogleドキュメントのURLは処理できません。"
       );
@@ -107,15 +119,21 @@ export class TranscriptionProcessor {
     }
 
     // Process only media file URLs (concurrency-limited)
-    for (const url of mediaUrls) {
+    for (const { url, performanceId, metadata } of mediaFiles) {
       if (isAtCapacity()) {
         await this.adapter.sendStatusMessage(
           `🕐 現在 ${activeCount()} 件処理中のため順番待ちです...`,
         );
       }
       let release: (() => void) | undefined;
+      const queueStartedAt = performance.now();
       try {
         release = await acquireSlot();
+        logPerformance("transcription_queue", {
+          performanceId,
+          source: "cloud",
+          queueMs: elapsedMs(queueStartedAt),
+        });
       } catch (error) {
         if (error instanceof ShuttingDownError) {
           await this.adapter.sendErrorMessage(
@@ -126,7 +144,13 @@ export class TranscriptionProcessor {
         throw error;
       }
       try {
-        await this.processCloudUrl(url, options, downloadOpts);
+        await this.processCloudUrl(
+          url,
+          options,
+          downloadOpts,
+          metadata,
+          performanceId,
+        );
       } finally {
         release();
       }
@@ -140,6 +164,8 @@ export class TranscriptionProcessor {
     url: string,
     options: TranscriptionOptions,
     downloadOpts?: { password?: string },
+    resolvedMetadata?: CloudFileMetadata,
+    performanceId: string = crypto.randomUUID(),
   ): Promise<void> {
     try {
       // Get metadata first to send status message with filename
@@ -159,7 +185,16 @@ export class TranscriptionProcessor {
       }
 
       // Get metadata first to check if it's a media file
-      const metadata = await service.getFileMetadata(fileId, downloadOpts);
+      let metadata = resolvedMetadata;
+      if (!metadata) {
+        const metadataStartedAt = performance.now();
+        metadata = await service.getFileMetadata(fileId, downloadOpts);
+        logPerformance("cloud_metadata", {
+          performanceId,
+          service: service.name,
+          metadataMs: elapsedMs(metadataStartedAt),
+        });
+      }
 
       // Check if file is a media file before sending status message
       if (!service.isMediaFile(metadata.mimeType)) {
@@ -180,6 +215,8 @@ export class TranscriptionProcessor {
         transcriptionOptions: options,
         adapter: this.adapter,
         password: downloadOpts?.password,
+        metadata,
+        performanceId,
       });
 
       if (!result.success) {
@@ -215,6 +252,7 @@ export class TranscriptionProcessor {
     options: TranscriptionOptions,
   ): Promise<void> {
     for (const attachment of attachments) {
+      const performanceId = crypto.randomUUID();
       if (!isValidAudioVideoFile(attachment.mimeType, attachment.filename)) {
         await this.adapter.sendStatusMessage(
           `ファイル "${attachment.filename}" は音声または動画ファイルではありません。`,
@@ -228,8 +266,14 @@ export class TranscriptionProcessor {
         );
       }
       let release: (() => void) | undefined;
+      const queueStartedAt = performance.now();
       try {
         release = await acquireSlot();
+        logPerformance("transcription_queue", {
+          performanceId,
+          source: "attachment",
+          queueMs: elapsedMs(queueStartedAt),
+        });
       } catch (error) {
         if (error instanceof ShuttingDownError) {
           await this.adapter.sendErrorMessage(
@@ -240,7 +284,7 @@ export class TranscriptionProcessor {
         throw error;
       }
       try {
-        await this.processAttachment(attachment, options);
+        await this.processAttachment(attachment, options, performanceId);
       } finally {
         release();
       }
@@ -253,28 +297,23 @@ export class TranscriptionProcessor {
   private async processAttachment(
     attachment: FileAttachment,
     options: TranscriptionOptions,
+    performanceId: string,
   ): Promise<void> {
-    let tempPath: string | undefined;
-
     try {
       // Update status
       await this.adapter.sendStatusMessage(
         this.adapter.formatProcessingMessage(attachment.filename, options),
       );
 
-      // Download file using platform adapter
+      // Resolve the MIME type before the single download in transcribeAudioFile.
       const fileType = resolveMediaMimeType(
         attachment.mimeType,
         attachment.filename,
       ) || "";
-      const extension = getFileExtensionFromMime(fileType);
-      tempPath = await this.tempManager.createTempFile("audio", extension);
-      await this.adapter.downloadFile(attachment.url, tempPath);
 
       // Transcribe
-      const fileURL = `file://${tempPath}`;
       await transcribeAudioFile({
-        fileURL,
+        fileURL: attachment.url,
         fileType,
         duration: attachment.duration || 0,
         channelId: this.context.channelId,
@@ -282,7 +321,7 @@ export class TranscriptionProcessor {
         userId: this.context.userId,
         options,
         filename: attachment.filename,
-        tempPath,
+        performanceId,
         adapter: this.adapter,
       });
 
@@ -292,8 +331,6 @@ export class TranscriptionProcessor {
       await this.adapter.sendErrorMessage(
         getErrorMessage(error),
       );
-    } finally {
-      // Cleanup is handled by scribe.ts
     }
   }
 
