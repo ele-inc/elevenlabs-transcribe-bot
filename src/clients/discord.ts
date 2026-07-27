@@ -223,21 +223,50 @@ export async function editInteractionReply(
   }
 }
 
-// Download file from Discord CDN - optimized for speed
-export async function downloadDiscordFile(url: string): Promise<Uint8Array> {
-  console.log("Downloading Discord file from:", url);
-  const response = await fetch(url);
+export async function downloadDiscordFileToPath(
+  url: string,
+  filePath: string,
+): Promise<void> {
+  console.log("Streaming Discord file to:", filePath);
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(3_600_000),
+  });
 
-  if (!response.ok) {
+  if (!response.ok || !response.body) {
     throw new Error(`Failed to download Discord file: ${response.status}`);
   }
 
-  // Download entire file at once for maximum speed
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = new Uint8Array(arrayBuffer);
+  const file = await Deno.open(filePath, {
+    write: true,
+    create: true,
+    truncate: true,
+  });
+  const writer = file.writable.getWriter();
+  const reader = response.body.getReader();
+  let downloadedBytes = 0;
 
-  console.log(`Download complete: ${(buffer.length / (1024 * 1024)).toFixed(2)}MB`);
-  return buffer;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      await writer.write(value);
+      downloadedBytes += value.byteLength;
+    }
+    await writer.close();
+  } finally {
+    reader.releaseLock();
+    try {
+      file.close();
+    } catch {
+      // The writable stream may already have closed the resource.
+    }
+  }
+
+  console.log(
+    `Discord download complete: ${
+      (downloadedBytes / (1024 * 1024)).toFixed(2)
+    }MB`,
+  );
 }
 
 // Get file info from Discord attachment URL

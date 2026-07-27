@@ -1,10 +1,11 @@
-import { dirname } from "@std/path";
 import { TranscriptionOptions } from "../core/types.ts";
 import { transcribeAudioFile } from "../core/scribe.ts";
 import { cloudServiceManager } from "./cloud-service-manager.ts";
+import type { CloudFileMetadata } from "./cloud-service.ts";
 import { PlatformAdapter } from "../adapters/platform-adapter.ts";
 import { getErrorMessage } from "../utils/errors.ts";
 import { isAudioVideoMimeType, resolveMediaMimeType } from "../utils/utils.ts";
+import { elapsedMs, logPerformance } from "../utils/performance.ts";
 
 export interface FileInfo {
   filename: string;
@@ -57,11 +58,17 @@ export async function processCloudFile(
     transcriptionOptions: TranscriptionOptions;
     adapter: PlatformAdapter;
     password?: string;
+    metadata?: CloudFileMetadata;
+    performanceId?: string;
   }
 ): Promise<ProcessingResult> {
   let tempPath: string | undefined;
   try {
-    const result = await cloudServiceManager.downloadFromUrl(url, { password: options.password });
+    const result = await cloudServiceManager.downloadFromUrl(url, {
+      password: options.password,
+      metadata: options.metadata,
+      performanceId: options.performanceId,
+    });
     tempPath = result.tempPath;
 
     if (!result.success) {
@@ -80,15 +87,15 @@ export async function processCloudFile(
     await transcribeAudioFile({
       fileURL: `file://${result.tempPath}`,
       fileType,
-      duration: 0,
+      duration: result.metadata.duration ?? 0,
       channelId: options.channelId,
       timestamp: options.timestamp,
       userId: options.userId,
       options: options.transcriptionOptions,
       filename: result.metadata.filename,
       sourceUrl: url,
-      isGoogleDrive: true, // TODO: Update to isCloudFile
       tempPath: result.tempPath,
+      performanceId: options.performanceId,
       adapter: options.adapter,
     });
 
@@ -103,13 +110,12 @@ export async function processCloudFile(
     // cloudServiceManager is a singleton, so cleanup() would delete
     // temp files from other concurrent requests
     if (tempPath) {
-      try {
-        await Deno.remove(tempPath).catch(() => {});
-        const dirPath = dirname(tempPath);
-        await Deno.remove(dirPath, { recursive: true }).catch(() => {});
-      } catch {
-        // Ignore cleanup errors
-      }
+      const cleanupStartedAt = performance.now();
+      await cloudServiceManager.cleanupDownloadedFile(tempPath).catch(() => {});
+      logPerformance("cloud_cleanup", {
+        performanceId: options.performanceId,
+        cleanupMs: elapsedMs(cleanupStartedAt),
+      });
     }
   }
 }

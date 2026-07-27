@@ -2,7 +2,11 @@
  * Adapter to use existing Google Drive code with CloudService interface
  */
 
-import { BaseCloudService, CloudFileMetadata } from "../services/cloud-service.ts";
+import {
+  BaseCloudService,
+  CloudDownloadOptions,
+  CloudFileMetadata,
+} from "../services/cloud-service.ts";
 import {
   parseGoogleDriveUrl,
   isGoogleDriveUrl,
@@ -36,9 +40,17 @@ export class GoogleDriveAdapter extends BaseCloudService {
     };
   }
 
-  async downloadFile(fileId: string, tempPath: string): Promise<boolean> {
+  async downloadFile(
+    fileId: string,
+    tempPath: string,
+    opts?: CloudDownloadOptions,
+  ): Promise<boolean> {
     // This already handles non-media file skipping
-    return await downloadGoogleDriveFileToPath(fileId, tempPath);
+    return await downloadGoogleDriveFileToPath(
+      fileId,
+      tempPath,
+      opts?.metadata,
+    );
   }
 
   /**

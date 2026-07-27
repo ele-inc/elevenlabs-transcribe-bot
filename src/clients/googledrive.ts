@@ -1,6 +1,7 @@
 import { JWT } from "google-auth-library";
 import { google } from "googleapis";
 import { config } from "../core/config.ts";
+import type { CloudFileMetadata } from "../services/cloud-service.ts";
 
 // Types for Google Drive file metadata
 interface GoogleDriveFile {
@@ -9,6 +10,8 @@ interface GoogleDriveFile {
   mimeType: string;
   size?: string;
 }
+
+let driveInstance: ReturnType<typeof google.drive> | null = null;
 
 // Parse Google Drive URL to extract file ID
 export function parseGoogleDriveUrl(url: string): string | null {
@@ -32,6 +35,10 @@ export function parseGoogleDriveUrl(url: string): string | null {
 
 // Initialize Google Drive client with service account
 function initializeGoogleDriveClient() {
+  if (driveInstance) {
+    return driveInstance;
+  }
+
   if (!config.googlePrivateKey) {
     throw new Error("GOOGLE_PRIVATE_KEY environment variable is not set");
   }
@@ -46,7 +53,8 @@ function initializeGoogleDriveClient() {
     subject: config.googleImpersonateEmail, // Impersonate a user in the organization (optional)
   });
 
-  return google.drive({ version: "v3", auth });
+  driveInstance = google.drive({ version: "v3", auth });
+  return driveInstance;
 }
 
 // Get file metadata from Google Drive
@@ -85,14 +93,21 @@ export async function getGoogleDriveFileMetadata(fileId: string): Promise<Google
 export async function downloadGoogleDriveFileToPath(
   fileId: string,
   tempPath: string,
+  resolvedMetadata?: CloudFileMetadata,
 ): Promise<boolean> {
   const drive = initializeGoogleDriveClient();
 
   try {
     const startTime = performance.now();
 
-    // Get file metadata first
-    const metadata = await getGoogleDriveFileMetadata(fileId);
+    const metadata: GoogleDriveFile = resolvedMetadata
+      ? {
+        id: resolvedMetadata.id,
+        name: resolvedMetadata.filename,
+        mimeType: resolvedMetadata.mimeType,
+        size: resolvedMetadata.size?.toString(),
+      }
+      : await getGoogleDriveFileMetadata(fileId);
     const fileSizeMB = metadata.size ? parseInt(metadata.size) / (1024 * 1024) : 0;
 
     console.log(`Starting download: ${metadata.name} (${fileSizeMB.toFixed(2)}MB)`);

@@ -13,6 +13,12 @@ export interface CloudFileMetadata {
 
 export interface CloudDownloadOptions {
   password?: string;
+  performanceId?: string;
+  /**
+   * Metadata resolved earlier in the request. Passing it through avoids
+   * repeating provider-specific metadata calls before download.
+   */
+  metadata?: CloudFileMetadata;
 }
 
 export interface CloudDownloadResult {
@@ -69,6 +75,14 @@ export interface CloudService {
    * Preferred temporary file extension for downloads (without dot)
    */
   getPreferredFileExtension?(): string;
+}
+
+export async function resolveCloudFileMetadata(
+  service: CloudService,
+  fileId: string,
+  opts?: CloudDownloadOptions,
+): Promise<CloudFileMetadata> {
+  return opts?.metadata ?? await service.getFileMetadata(fileId, opts);
 }
 
 /**
