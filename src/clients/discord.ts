@@ -228,7 +228,9 @@ export async function downloadDiscordFileToPath(
   filePath: string,
 ): Promise<void> {
   console.log("Streaming Discord file to:", filePath);
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(3_600_000),
+  });
 
   if (!response.ok || !response.body) {
     throw new Error(`Failed to download Discord file: ${response.status}`);
