@@ -1,19 +1,16 @@
-import {
-  TranscriptionOptions,
-  TranscriptionLog
-} from "./types.ts";
-import {
-  getFileExtensionFromMime,
-  createTranscriptionHeader,
-} from "../utils/utils.ts";
-import { summarizeTranscript } from "../clients/gemini-client.ts";
+import { TranscriptionLog, TranscriptionOptions } from "./types.ts";
+import { getFileExtensionFromMime } from "../utils/utils.ts";
 import { PlatformAdapter } from "../adapters/platform-adapter.ts";
 import {
+  submitTranscriptionFileWebhook,
   transcribeFile,
   type TranscriptionTimings,
 } from "./transcribe-core.ts";
 import { TempFileManager } from "../services/temp-file-manager.ts";
 import { elapsedMs, logPerformance } from "../utils/performance.ts";
+import { deliverTranscriptionResult } from "../services/transcription-result-delivery.ts";
+import { getElevenLabsWebhookConfig } from "./config.ts";
+import { createTranscriptionWebhookMetadata } from "./transcription-webhook.ts";
 
 /**
  * Transcribe audio/video file from Slack/Discord
@@ -57,6 +54,7 @@ export async function transcribeAudioFile({
   let transcriptUploadMs = 0;
   let summaryMs = 0;
   let cleanupMs = 0;
+  let webhookRequestId: string | null = null;
   let transcriptionTimings: TranscriptionTimings | undefined;
   const tempManager = new TempFileManager();
 
@@ -85,6 +83,35 @@ export async function transcribeAudioFile({
     }
     inputBytes = (await Deno.stat(tempFilePath)).size;
 
+    const webhookConfig = getElevenLabsWebhookConfig();
+    if (webhookConfig) {
+      const webhookMetadata = createTranscriptionWebhookMetadata({
+        context: adapter.getWebhookDeliveryContext(),
+        performanceId,
+        filename,
+        sourceUrl,
+        fileType,
+        duration,
+        options,
+      });
+      const submission = await submitTranscriptionFileWebhook(
+        tempFilePath,
+        options,
+        webhookConfig.webhookId,
+        webhookMetadata as unknown as Record<string, unknown>,
+        fileType,
+        performanceId,
+      );
+      webhookRequestId = submission.requestId;
+      transcriptionTimings = submission.timings;
+      console.log("Transcription accepted for webhook delivery:", {
+        performanceId,
+        requestId: submission.requestId,
+        transcriptionId: submission.transcriptionId,
+      });
+      return;
+    }
+
     // Use the unified transcribeFile function
     // It handles video detection and conversion internally
     const result = await transcribeFile(
@@ -98,35 +125,15 @@ export async function transcribeAudioFile({
     transcript = result.transcript;
     languageCode = result.languageCode;
 
-    if (transcript) {
-      // Add header: URL takes precedence over filename when present
-      const finalTranscript = sourceUrl || filename
-        ? createTranscriptionHeader(filename, sourceUrl) + transcript
-        : transcript;
-
-      const transcriptUploadStartedAt = performance.now();
-      try {
-        await adapter.uploadTranscript(finalTranscript, filename);
-      } finally {
-        transcriptUploadMs = elapsedMs(transcriptUploadStartedAt);
-      }
-      if (options.summarize !== false) {
-        const summaryStartedAt = performance.now();
-        try {
-          const summary = await summarizeTranscript(finalTranscript);
-          await adapter.sendSummary(summary, { filename, options });
-        } catch (error) {
-          console.error("Failed to generate or send transcript summary:", error);
-        } finally {
-          summaryMs = elapsedMs(summaryStartedAt);
-        }
-      } else {
-        console.log("Summary generation skipped by --no-summarize option");
-      }
-    } else {
-      console.log("No transcript generated, sending error message");
-      await adapter.sendErrorMessage("文字起こしの生成に失敗しました。もう一度お試しください。");
-    }
+    const delivery = await deliverTranscriptionResult({
+      transcript,
+      filename,
+      sourceUrl,
+      options,
+      adapter,
+    });
+    transcriptUploadMs = delivery.transcriptUploadMs;
+    summaryMs = delivery.summaryMs;
   } finally {
     const cleanupStartedAt = performance.now();
     // Clean up temp file (transcribeFile handles its own converted audio cleanup)
@@ -147,13 +154,14 @@ export async function transcribeAudioFile({
       conversionMs: transcriptionTimings?.conversionMs ?? 0,
       fileReadMs: transcriptionTimings?.fileReadMs ?? 0,
       sttMs: transcriptionTimings?.sttMs ?? 0,
-      speakerIdentificationMs:
-        transcriptionTimings?.speakerIdentificationMs ?? 0,
+      speakerIdentificationMs: transcriptionTimings?.speakerIdentificationMs ??
+        0,
       transcriptUploadMs,
       summaryMs,
       cleanupMs,
       totalMs: elapsedMs(startedAt),
-      success: Boolean(transcript),
+      webhookRequestId,
+      success: Boolean(transcript) || Boolean(webhookRequestId),
     });
   }
 
@@ -168,9 +176,13 @@ export async function transcribeAudioFile({
   };
 
   // Log transcription completion to console
-  console.log("Transcription completed:", {
-    ...logLine,
-    transcriptLength: transcript ? transcript.length : 0,
-    timestamp: new Date().toISOString()
-  });
+  console.log(
+    webhookRequestId ? "Transcription submitted:" : "Transcription completed:",
+    {
+      ...logLine,
+      webhookRequestId,
+      transcriptLength: transcript ? transcript.length : 0,
+      timestamp: new Date().toISOString(),
+    },
+  );
 }

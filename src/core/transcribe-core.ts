@@ -1,27 +1,16 @@
-import { ElevenLabsClient } from "elevenlabs";
 import { dirname } from "@std/path";
 import type { TranscriptionOptions, WordItem } from "./types.ts";
-import {
-  formatTranscriptSegments,
-  segmentWords,
-} from "../utils/transcript-segments.ts";
 import { convertVideoToAudio, isVideoFile } from "../utils/utils.ts";
 import {
   identifySpeakers,
   replaceSpeakerLabels,
 } from "../clients/gemini-client.ts";
-import { config } from "./config.ts";
+import { getElevenLabsClient } from "../clients/elevenlabs-client.ts";
 import { elapsedMs, logPerformance } from "../utils/performance.ts";
-
-let elevenlabsInstance: ElevenLabsClient | null = null;
-function getElevenLabsClient(): ElevenLabsClient {
-  if (!elevenlabsInstance) {
-    elevenlabsInstance = new ElevenLabsClient({
-      apiKey: config.elevenLabsApiKey,
-    });
-  }
-  return elevenlabsInstance;
-}
+import {
+  normalizeAndFormatTranscriptionPayload,
+  type TranscriptionPayload,
+} from "./transcription-payload.ts";
 
 export interface TranscriptionResult {
   transcript: string;
@@ -39,6 +28,12 @@ export interface TranscriptionTimings {
   totalMs: number;
   inputBytes: number;
   processedBytes: number;
+}
+
+export interface WebhookSubmissionResult {
+  requestId: string;
+  transcriptionId?: string;
+  timings: TranscriptionTimings;
 }
 
 /**
@@ -88,30 +83,58 @@ export async function transcribeCore(
   const sttStartedAt = performance.now();
   const scribeResult = await getElevenLabsClient().speechToText.convert({
     file: file,
-    model_id: "scribe_v2",
-    tag_audio_events: options.tagAudioEvents,
+    modelId: "scribe_v2",
+    tagAudioEvents: options.tagAudioEvents,
     diarize: options.diarize,
     ...(options.diarize && options.numSpeakers
-      ? { num_speakers: options.numSpeakers }
+      ? { numSpeakers: options.numSpeakers }
       : {}),
   }, { timeoutInSeconds: 3600 });
   const sttMs = elapsedMs(sttStartedAt);
 
-  const words: WordItem[] | undefined =
-    (scribeResult as { words?: WordItem[] }).words;
-  let transcript = "";
+  const formatted = await formatTranscriptionPayload(
+    scribeResult as TranscriptionPayload,
+    options,
+  );
+  const coreTotalMs = elapsedMs(coreStartedAt);
 
-  // Process transcription from word-level timestamps. Speaker labels are optional
-  // metadata on top of the same segmentation rules.
-  if (Array.isArray(words) && words.length > 0) {
-    const segments = segmentWords(words, {
-      splitOnSpeakerChange: options.diarize,
-    });
-    transcript = formatTranscriptSegments(segments, options);
-  } else {
-    const plain = (scribeResult.text || "").trim();
-    transcript = plain.replace(/([。.!！?？])\s*/g, "$1\n").trim();
-  }
+  logPerformance("transcription_core", {
+    performanceId,
+    mimeType,
+    processedBytes: fileData.length,
+    sttMs,
+    speakerIdentificationMs: formatted.speakerIdentificationMs,
+    coreTotalMs,
+  });
+
+  return {
+    transcript: formatted.transcript,
+    languageCode: formatted.languageCode,
+    words: formatted.words,
+    timings: {
+      conversionMs: 0,
+      fileReadMs: 0,
+      sttMs,
+      speakerIdentificationMs: formatted.speakerIdentificationMs,
+      coreTotalMs,
+      totalMs: coreTotalMs,
+      inputBytes: fileData.length,
+      processedBytes: fileData.length,
+    },
+  };
+}
+
+export async function formatTranscriptionPayload(
+  payload: TranscriptionPayload,
+  options: TranscriptionOptions,
+): Promise<{
+  transcript: string;
+  languageCode: string | null;
+  words?: WordItem[];
+  speakerIdentificationMs: number;
+}> {
+  const normalized = normalizeAndFormatTranscriptionPayload(payload, options);
+  let transcript = normalized.transcript;
 
   // Apply speaker name mapping if provided
   let speakerIdentificationMs = 0;
@@ -136,28 +159,76 @@ export async function transcribeCore(
     }
   }
 
-  const languageCode =
-    (scribeResult as { language_code?: string }).language_code || null;
+  return {
+    transcript,
+    languageCode: normalized.languageCode,
+    words: normalized.words,
+    speakerIdentificationMs,
+  };
+}
+
+export async function submitTranscriptionWebhookCore(
+  fileData: Uint8Array<ArrayBuffer>,
+  mimeType: string,
+  options: TranscriptionOptions,
+  webhookId: string,
+  webhookMetadata: Record<string, unknown>,
+  performanceId: string = crypto.randomUUID(),
+): Promise<WebhookSubmissionResult> {
+  const coreStartedAt = performance.now();
+  const extension = mimeType === "audio/wav"
+    ? "wav"
+    : mimeType === "audio/mpeg"
+    ? "mp3"
+    : mimeType === "audio/mp4"
+    ? "m4a"
+    : mimeType === "audio/ogg"
+    ? "ogg"
+    : mimeType === "audio/flac"
+    ? "flac"
+    : "audio";
+  const file = new File([fileData], `audio.${extension}`, { type: mimeType });
+
+  const sttStartedAt = performance.now();
+  const submission = await getElevenLabsClient().speechToText.convert({
+    file,
+    modelId: "scribe_v2",
+    tagAudioEvents: options.tagAudioEvents,
+    diarize: options.diarize,
+    ...(options.diarize && options.numSpeakers
+      ? { numSpeakers: options.numSpeakers }
+      : {}),
+    webhook: true,
+    webhookId,
+    webhookMetadata,
+  }, { timeoutInSeconds: 3600 });
+  const sttMs = elapsedMs(sttStartedAt);
+  const result = submission as unknown as {
+    requestId?: string;
+    transcriptionId?: string;
+  };
+  if (!result.requestId) {
+    throw new Error("ElevenLabs webhook submission did not return requestId");
+  }
   const coreTotalMs = elapsedMs(coreStartedAt);
 
-  logPerformance("transcription_core", {
+  logPerformance("transcription_webhook_submission", {
     performanceId,
+    requestId: result.requestId,
     mimeType,
     processedBytes: fileData.length,
     sttMs,
-    speakerIdentificationMs,
     coreTotalMs,
   });
 
   return {
-    transcript,
-    languageCode,
-    words,
+    requestId: result.requestId,
+    transcriptionId: result.transcriptionId,
     timings: {
       conversionMs: 0,
       fileReadMs: 0,
       sttMs,
-      speakerIdentificationMs,
+      speakerIdentificationMs: 0,
       coreTotalMs,
       totalMs: coreTotalMs,
       inputBytes: fileData.length,
@@ -282,6 +353,82 @@ export async function transcribeFile(
       await Deno.remove(audioFilePath).catch(() => {});
       const audioDir = dirname(audioFilePath);
       await Deno.remove(audioDir).catch(() => {});
+    }
+  }
+}
+
+export async function submitTranscriptionFileWebhook(
+  filePath: string,
+  options: TranscriptionOptions,
+  webhookId: string,
+  webhookMetadata: Record<string, unknown>,
+  mimeType?: string,
+  performanceId: string = crypto.randomUUID(),
+): Promise<WebhookSubmissionResult> {
+  const startedAt = performance.now();
+  let processedFilePath = filePath;
+  let audioFilePath: string | null = null;
+  let convertedMimeType: string | null = null;
+  let conversionMs = 0;
+  let fileReadMs = 0;
+
+  try {
+    const extension = filePath.split(".").pop()?.toLowerCase() || "";
+    const effectiveMimeType = mimeType || getMimeTypeFromExtension(extension);
+
+    if (isVideoFile(effectiveMimeType)) {
+      const conversionStartedAt = performance.now();
+      const converted = await convertVideoToAudio(
+        filePath,
+        options.diarize !== false,
+      );
+      conversionMs = elapsedMs(conversionStartedAt);
+      audioFilePath = converted.path;
+      convertedMimeType = converted.mimeType;
+      processedFilePath = converted.path;
+    }
+
+    const fileReadStartedAt = performance.now();
+    const fileData = await Deno.readFile(processedFilePath);
+    fileReadMs = elapsedMs(fileReadStartedAt);
+    const finalMimeType = convertedMimeType ?? effectiveMimeType;
+    const result = await submitTranscriptionWebhookCore(
+      fileData,
+      finalMimeType,
+      options,
+      webhookId,
+      webhookMetadata,
+      performanceId,
+    );
+    const totalMs = elapsedMs(startedAt);
+    const inputBytes = (await Deno.stat(filePath)).size;
+    result.timings = {
+      ...result.timings,
+      conversionMs,
+      fileReadMs,
+      totalMs,
+      inputBytes,
+      processedBytes: fileData.length,
+    };
+
+    logPerformance("transcription_webhook_file", {
+      performanceId,
+      requestId: result.requestId,
+      inputMimeType: effectiveMimeType,
+      processedMimeType: finalMimeType,
+      inputBytes,
+      processedBytes: fileData.length,
+      conversionMs,
+      fileReadMs,
+      submissionMs: result.timings.sttMs,
+      totalMs,
+    });
+
+    return result;
+  } finally {
+    if (audioFilePath) {
+      await Deno.remove(audioFilePath).catch(() => {});
+      await Deno.remove(dirname(audioFilePath)).catch(() => {});
     }
   }
 }

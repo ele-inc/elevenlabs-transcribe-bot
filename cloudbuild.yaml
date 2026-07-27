@@ -21,10 +21,20 @@ steps:
           YOUTUBE_PROXY
           YOUTUBE_COOKIES_BASE64
         )
+        OPTIONAL_SECRETS=(
+          ELEVENLABS_WEBHOOK_ID
+          ELEVENLABS_WEBHOOK_SECRET
+        )
 
         mapping=""
         for name in "$${SECRETS[@]}"; do
           mapping+="$${name}=$${name}:latest,"
+        done
+        for name in "$${OPTIONAL_SECRETS[@]}"; do
+          if gcloud secrets describe "$${name}" \
+            --project="$PROJECT_ID" >/dev/null 2>&1; then
+            mapping+="$${name}=$${name}:latest,"
+          fi
         done
         mapping="$${mapping%,}"
 
