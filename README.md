@@ -82,6 +82,9 @@ cd <repository-name>
 
 ```
 ELEVENLABS_API_KEY="your-elevenlabs-api-key"
+# Speech-to-Text Webhook を使う場合のみ。2つを同時に設定してください。
+ELEVENLABS_WEBHOOK_ID="your-speech-to-text-webhook-id"
+ELEVENLABS_WEBHOOK_SECRET="your-speech-to-text-webhook-secret"
 SLACK_BOT_TOKEN="your-slack-bot-token"
 DISCORD_APPLICATION_ID="your-discord-app-id"
 DISCORD_PUBLIC_KEY="your-discord-public-key"
@@ -96,6 +99,22 @@ YOUTUBE_COOKIES_BASE64="base64-encoded-cookies-content"
 # ローカル / コンテナ用：cookies ファイルへのパス
 # YOUTUBE_COOKIES="/path/to/cookies.txt"
 ```
+
+`ELEVENLABS_WEBHOOK_ID` と `ELEVENLABS_WEBHOOK_SECRET` が両方設定されている
+場合、Bot からの文字起こしは非同期 Webhook に切り替わります。未設定の場合と
+`scribe` CLI は従来どおり同期処理を使います。
+
+ElevenLabs の Speech-to-Text Webhook URL には次を設定します：
+
+```
+https://YOUR-PUBLIC-URL/webhooks/elevenlabs/speech-to-text
+```
+
+コールバックは `ElevenLabs-Signature` の HMAC 署名とタイムスタンプを検証します。
+ElevenLabs から到達可能な HTTPS URL が必要です。現在の `cloudbuild.yaml` は
+Cloud Run を認証必須でデプロイするため、本番利用時はこのパスだけを公開する
+API Gateway / リバースプロキシを用意するか、Slack 側も含めた署名検証を整備した
+うえでサービスを公開してください。
 
 ### 3. Cloud Run へデプロイ
 

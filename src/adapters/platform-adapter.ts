@@ -1,17 +1,22 @@
 import { TranscriptionOptions } from "../core/types.ts";
+import type { WebhookDeliveryContext } from "../core/transcription-webhook.ts";
 import { formatOptionsText } from "../services/file-processor.ts";
-import { sendSlackMessage, uploadTranscriptToSlack, downloadSlackFileToPath } from "../clients/slack.ts";
 import {
+  downloadSlackFileToPath,
+  sendSlackMessage,
+  uploadTranscriptToSlack,
+} from "../clients/slack.ts";
+import {
+  downloadDiscordFileToPath,
   editInteractionReply,
+  isUnknownWebhookError,
   sendDiscordMessage,
   uploadTranscriptToDiscord,
-  downloadDiscordFileToPath,
-  isUnknownWebhookError,
 } from "../clients/discord.ts";
 import { getUsageMessage } from "../utils/messages.ts";
 import {
-  buildSummaryBlocks,
   buildErrorBlocks,
+  buildSummaryBlocks,
   summaryFallbackText,
 } from "../utils/slack-blocks.ts";
 // @ts-ignore: Types are provided in the deployment environment
@@ -26,16 +31,23 @@ export interface PlatformAdapter {
   sendStatusMessage(message: string): Promise<void>;
   sendErrorMessage(error: string, hint?: string): Promise<void>;
   sendUsageMessage(): Promise<void>;
-  formatProcessingMessage(filename: string, options: TranscriptionOptions): string;
+  formatProcessingMessage(
+    filename: string,
+    options: TranscriptionOptions,
+  ): string;
   uploadTranscript(transcript: string, filename?: string): Promise<void>;
   sendSummary(summary: string, context?: SummaryContext): Promise<void>;
   downloadFile(fileURL: string, filePath: string): Promise<void>;
+  getWebhookDeliveryContext(): WebhookDeliveryContext;
 }
 
 /**
  * Common implementation for formatting processing message
  */
-function formatProcessingMessageCommon(filename: string, options: TranscriptionOptions): string {
+function formatProcessingMessageCommon(
+  filename: string,
+  options: TranscriptionOptions,
+): string {
   const optionsText = formatOptionsText(options);
   return `ファイル "${filename}" を受信しました。文字起こし中${optionsText}...`;
 }
@@ -43,7 +55,7 @@ function formatProcessingMessageCommon(filename: string, options: TranscriptionO
 export class SlackAdapter implements PlatformAdapter {
   constructor(
     private channelId: string,
-    private threadTimestamp: string
+    private threadTimestamp: string,
   ) {}
 
   async sendStatusMessage(message: string): Promise<void> {
@@ -64,12 +76,22 @@ export class SlackAdapter implements PlatformAdapter {
     await this.sendStatusMessage(getUsageMessage());
   }
 
-  formatProcessingMessage(filename: string, options: TranscriptionOptions): string {
+  formatProcessingMessage(
+    filename: string,
+    options: TranscriptionOptions,
+  ): string {
     return formatProcessingMessageCommon(filename, options);
   }
 
-  async uploadTranscript(transcript: string, _filename?: string): Promise<void> {
-    await uploadTranscriptToSlack(transcript, this.channelId, this.threadTimestamp);
+  async uploadTranscript(
+    transcript: string,
+    _filename?: string,
+  ): Promise<void> {
+    await uploadTranscriptToSlack(
+      transcript,
+      this.channelId,
+      this.threadTimestamp,
+    );
   }
 
   async sendSummary(summary: string, context?: SummaryContext): Promise<void> {
@@ -89,11 +111,19 @@ export class SlackAdapter implements PlatformAdapter {
   async downloadFile(fileURL: string, filePath: string): Promise<void> {
     await downloadSlackFileToPath(fileURL, filePath);
   }
+
+  getWebhookDeliveryContext(): WebhookDeliveryContext {
+    return {
+      platform: "slack",
+      channelId: this.channelId,
+      threadTimestamp: this.threadTimestamp,
+    };
+  }
 }
 
 export class DiscordAdapter implements PlatformAdapter {
   constructor(
-    private interaction: APIInteraction,
+    private interaction: APIInteraction | undefined,
     private channelId: string,
   ) {}
 
@@ -110,11 +140,17 @@ export class DiscordAdapter implements PlatformAdapter {
     await this.sendStatusMessage(getUsageMessage());
   }
 
-  formatProcessingMessage(filename: string, options: TranscriptionOptions): string {
+  formatProcessingMessage(
+    filename: string,
+    options: TranscriptionOptions,
+  ): string {
     return formatProcessingMessageCommon(filename, options);
   }
 
-  async uploadTranscript(transcript: string, _filename?: string): Promise<void> {
+  async uploadTranscript(
+    transcript: string,
+    _filename?: string,
+  ): Promise<void> {
     await uploadTranscriptToDiscord(transcript, this.channelId);
   }
 
@@ -129,9 +165,18 @@ export class DiscordAdapter implements PlatformAdapter {
     await downloadDiscordFileToPath(fileURL, filePath);
   }
 
+  getWebhookDeliveryContext(): WebhookDeliveryContext {
+    return { platform: "discord", channelId: this.channelId };
+  }
+
   private async editInteractionReplyOrSendToChannel(
     message: string,
   ): Promise<void> {
+    if (!this.interaction) {
+      await sendDiscordMessage(this.channelId, message);
+      return;
+    }
+
     try {
       await editInteractionReply(
         this.interaction.application_id,
@@ -155,13 +200,25 @@ export class DiscordAdapter implements PlatformAdapter {
   }
 }
 
+export function createWebhookPlatformAdapter(
+  context: WebhookDeliveryContext,
+): PlatformAdapter {
+  if (context.platform === "discord") {
+    return new DiscordAdapter(undefined, context.channelId);
+  }
+  if (!context.threadTimestamp) {
+    throw new Error("Slack webhook adapter requires threadTimestamp");
+  }
+  return new SlackAdapter(context.channelId, context.threadTimestamp);
+}
+
 export function createPlatformAdapter(
   platform: "discord" | "slack",
   context: {
     channelId: string;
     interaction?: APIInteraction;
     threadTimestamp?: string;
-  }
+  },
 ): PlatformAdapter {
   if (platform === "discord") {
     if (!context.interaction) {

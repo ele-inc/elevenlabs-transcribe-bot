@@ -2,8 +2,9 @@ import { handleDiscordInteraction } from "./handlers/discord-handler.ts";
 import { handleSlackEvents } from "./handlers/slack-handler.ts";
 import { handleSlackInteractions } from "./handlers/slack-interaction-handler.ts";
 import { config } from "./core/config.ts";
-import { textResponse, methodNotAllowed } from "./utils/http-utils.ts";
+import { methodNotAllowed, textResponse } from "./utils/http-utils.ts";
 import { installGracefulShutdown } from "./services/concurrency-limiter.ts";
+import { handleElevenLabsWebhook } from "./handlers/elevenlabs-webhook-handler.ts";
 
 console.log(`Function "elevenlabs-scribe-bot" up and running!`);
 
@@ -40,5 +41,12 @@ Deno.serve({ port }, async (req) => {
     return await handleSlackInteractions(req);
   }
 
-  return methodNotAllowed(['GET', 'POST']);
+  if (
+    pathname === "/webhooks/elevenlabs/speech-to-text" &&
+    req.method === "POST"
+  ) {
+    return await handleElevenLabsWebhook(req);
+  }
+
+  return methodNotAllowed(["GET", "POST"]);
 });
