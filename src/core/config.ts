@@ -8,6 +8,13 @@ interface Config {
   port: number;
   maxConcurrentTranscriptions: number;
 
+  // Durable transcription API
+  gcpProjectId?: string;
+  gcpRegion: string;
+  transcriptionJobName: string;
+  transcriptionJobsCollection: string;
+  transcriptionResultsBucket?: string;
+
   // Slack
   slackBotToken: string;
 
@@ -57,6 +64,24 @@ export const config: Config = {
   get port() { return parseInt(Deno.env.get("PORT") || "8080"); },
   get maxConcurrentTranscriptions() {
     return getIntegerEnv("MAX_CONCURRENT_TRANSCRIPTIONS", 3);
+  },
+
+  get gcpProjectId() {
+    return getOptionalEnv("GCP_PROJECT_ID");
+  },
+  get gcpRegion() {
+    return getOptionalEnv("GCP_REGION") || "asia-northeast1";
+  },
+  get transcriptionJobName() {
+    return getOptionalEnv("TRANSCRIPTION_JOB_NAME") ||
+      "scribe-transcription-worker";
+  },
+  get transcriptionJobsCollection() {
+    return getOptionalEnv("TRANSCRIPTION_JOBS_COLLECTION") ||
+      "transcription_jobs";
+  },
+  get transcriptionResultsBucket() {
+    return getOptionalEnv("TRANSCRIPTION_RESULTS_BUCKET");
   },
 
   get slackBotToken() { return getEnvOrThrow("SLACK_BOT_TOKEN"); },

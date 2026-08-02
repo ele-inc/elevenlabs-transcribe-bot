@@ -6,6 +6,8 @@ REGION="asia-northeast1"
 SERVICE="scribe-bot"
 MAX_CONCURRENT_TRANSCRIPTIONS="8"
 GEMINI_MODEL="gemini-3.6-flash"
+JOB_NAME="scribe-transcription-worker"
+RESULTS_BUCKET="${PROJECT_ID}-scribe-results"
 
 SECRETS=(
   ELEVENLABS_API_KEY
@@ -63,7 +65,27 @@ gcloud run deploy "$SERVICE" \
   --min-instances=0 \
   --max-instances=1 \
   --port=8080 \
-  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS,GEMINI_MODEL=$GEMINI_MODEL" \
+  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS,GEMINI_MODEL=$GEMINI_MODEL,GCP_REGION=$REGION,TRANSCRIPTION_JOB_NAME=$JOB_NAME,TRANSCRIPTION_RESULTS_BUCKET=$RESULTS_BUCKET" \
+  --set-secrets="$mapping"
+
+SERVICE_IMAGE=$(gcloud run services describe "$SERVICE" \
+  --project="$PROJECT_ID" \
+  --region="$REGION" \
+  --format='value(spec.template.spec.containers[0].image)')
+
+echo "🚀 Deploying durable transcription worker job..."
+gcloud run jobs deploy "$JOB_NAME" \
+  --project="$PROJECT_ID" \
+  --region="$REGION" \
+  --image="$SERVICE_IMAGE" \
+  --command=deno \
+  --args=run,--allow-net,--allow-env,--allow-read,--allow-write,--allow-run,job-worker.ts \
+  --memory=32Gi \
+  --cpu=8 \
+  --tasks=1 \
+  --max-retries=1 \
+  --task-timeout=7200s \
+  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS,GEMINI_MODEL=$GEMINI_MODEL,GCP_REGION=$REGION,TRANSCRIPTION_JOB_NAME=$JOB_NAME,TRANSCRIPTION_RESULTS_BUCKET=$RESULTS_BUCKET" \
   --set-secrets="$mapping"
 
 echo "✅ Deployed"

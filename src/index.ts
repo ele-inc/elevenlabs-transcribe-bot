@@ -4,6 +4,7 @@ import { handleSlackInteractions } from "./handlers/slack-interaction-handler.ts
 import { config } from "./core/config.ts";
 import { textResponse, methodNotAllowed } from "./utils/http-utils.ts";
 import { installGracefulShutdown } from "./services/concurrency-limiter.ts";
+import { handleTranscriptionApi } from "./handlers/transcription-api-handler.ts";
 
 console.log(`Function "elevenlabs-scribe-bot" up and running!`);
 
@@ -22,6 +23,15 @@ Deno.serve({ port }, async (req) => {
   // Health check endpoint
   if (pathname === "/" && req.method === "GET") {
     return textResponse("ElevenLabs Scribe Bot is running!");
+  }
+
+  // Durable service-to-service transcription API. Authentication is enforced
+  // by Cloud Run IAM before the request reaches this handler.
+  if (
+    pathname === "/v1/transcription-jobs" ||
+    pathname.startsWith("/v1/transcription-jobs/")
+  ) {
+    return await handleTranscriptionApi(req);
   }
 
   // Discord endpoint

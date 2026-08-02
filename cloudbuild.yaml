@@ -28,7 +28,9 @@ steps:
         done
         mapping="$${mapping%,}"
 
-        RUNTIME_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8,GEMINI_MODEL=gemini-3.6-flash"
+        RESULTS_BUCKET="$${PROJECT_ID}-scribe-results"
+        JOB_NAME="scribe-transcription-worker"
+        RUNTIME_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8,GEMINI_MODEL=gemini-3.6-flash,GCP_REGION=asia-northeast1,TRANSCRIPTION_JOB_NAME=$${JOB_NAME},TRANSCRIPTION_RESULTS_BUCKET=$${RESULTS_BUCKET}"
 
         gcloud run deploy scribe-bot \
           --project="$PROJECT_ID" \
@@ -45,6 +47,25 @@ steps:
           --min-instances=0 \
           --max-instances=1 \
           --port=8080 \
+          --set-env-vars="$${RUNTIME_ENV}" \
+          --set-secrets="$${mapping}"
+
+        SERVICE_IMAGE="$$(gcloud run services describe scribe-bot \
+          --project="$PROJECT_ID" \
+          --region=asia-northeast1 \
+          --format='value(spec.template.spec.containers[0].image)')"
+
+        gcloud run jobs deploy "$${JOB_NAME}" \
+          --project="$PROJECT_ID" \
+          --region=asia-northeast1 \
+          --image="$${SERVICE_IMAGE}" \
+          --command=deno \
+          --args=run,--allow-net,--allow-env,--allow-read,--allow-write,--allow-run,job-worker.ts \
+          --memory=32Gi \
+          --cpu=8 \
+          --tasks=1 \
+          --max-retries=1 \
+          --task-timeout=7200s \
           --set-env-vars="$${RUNTIME_ENV}" \
           --set-secrets="$${mapping}"
 
