@@ -3,14 +3,7 @@ import {
   segmentWords,
 } from "./transcript-segments.ts";
 import type { TranscriptionOptions, WordItem } from "../core/types.ts";
-
-function assertEquals<T>(actual: T, expected: T) {
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error(
-      `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
-    );
-  }
-}
+import { assertEquals } from "@std/assert";
 
 const baseOptions: TranscriptionOptions = {
   diarize: false,

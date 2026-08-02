@@ -66,7 +66,7 @@ docker push gcr.io/YOUR_PROJECT_ID/scribe-bot
 gcloud run deploy scribe-bot \
   --image gcr.io/YOUR_PROJECT_ID/scribe-bot \
   --region asia-northeast1 \
-  --allow-unauthenticated \
+  --no-allow-unauthenticated \
   --memory 1Gi \
   --cpu 1 \
   --timeout 300 \

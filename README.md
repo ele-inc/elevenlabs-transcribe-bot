@@ -11,6 +11,7 @@
 - **タイムスタンプ自動付与:** 発話位置のナビゲーション用にタイムスタンプを付ける
 - **音声イベント検出:** 音楽・笑い声などの音声イベントを検出
 - **柔軟な出力:** 文字起こし結果をテキストファイルとしてスレッドに返却
+- **非同期 Web API:** 他サービスからジョブを登録し、接続やページのリロードに依存せず結果を取得
 
 ## 文字起こしオプション
 
@@ -40,14 +41,14 @@ Bot をメンションする際にオプションを追加してカスタマイ�
 
 ```
 src/
-├── index.ts          # メインエントリーポイント、リクエストルーティング
-├── slack-handler.ts  # Slack イベントハンドラ
-├── discord-handler.ts # Discord インタラクションハンドラ
-├── scribe.ts         # ElevenLabs Scribe API 連携
-├── slack.ts          # Slack API ユーティリティ
-├── discord.ts        # Discord API ユーティリティ
-├── types.ts          # TypeScript 型定義
-└── utils.ts          # テキスト処理用ヘルパー
+├── index.ts             # Slack・Discord Bot サービス
+├── api-server.ts        # 文字起こし Web API サービス
+├── job-worker.ts        # 非同期文字起こし Worker Job
+├── handlers/            # Bot・API の HTTP ハンドラー
+├── services/            # ジョブ管理・文字起こしサービス
+├── adapters/            # 入力元・出力先アダプター
+├── clients/             # 外部 API・メディア取得クライアント
+└── core/                # プラットフォーム非依存の文字起こしコア
 ```
 
 ## 技術スタック
@@ -111,7 +112,7 @@ make deploy
 gcloud run deploy scribe-bot \
   --source . \
   --region asia-northeast1 \
-  --allow-unauthenticated
+  --no-allow-unauthenticated
 ```
 
 ### 4. Slack アプリの設定
@@ -158,6 +159,12 @@ gcloud run deploy scribe-bot \
 Cloud Run の URL は `gcloud run deploy` の出力、または Google Cloud Console で確認できます。
 
 ## 使い方
+
+### Web API
+
+独立した `scribe-api` サービスの `POST /v1/transcription-jobs` へ対応サービスのURLを登録すると、永続的な非同期ジョブとして文字起こしします。返された `jobId` を使って状態と結果を取得できるため、呼び出し元のページをリロードしても処理は継続します。Slack・Discordを受け付ける `scribe-bot` とは別のCloud Runサービスです。
+
+セットアップ、認証、リクエスト形式は [Web API ドキュメント](docs/WEB_API.md)、サービスごとの責任は [アーキテクチャ](docs/ARCHITECTURE.md) を参照してください。
 
 ### Slack
 

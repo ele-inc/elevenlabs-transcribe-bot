@@ -4,12 +4,8 @@ import {
   type CloudFileMetadata,
   resolveCloudFileMetadata,
 } from "./cloud-service.ts";
-
-function assertEquals<T>(actual: T, expected: T): void {
-  if (actual !== expected) {
-    throw new Error(`Expected ${String(expected)}, got ${String(actual)}`);
-  }
-}
+import { assertEquals } from "@std/assert";
+import { isAllowedHlsApiUrl } from "../utils/hls-url-policy.ts";
 
 class MetadataReuseService extends BaseCloudService {
   readonly name = "Metadata reuse test";
@@ -40,6 +36,66 @@ class MetadataReuseService extends BaseCloudService {
     return Promise.resolve(true);
   }
 }
+
+Deno.test("HLS API URL は許可したホストとそのサブドメインだけ受け付ける", () => {
+  const allowedHosts = ["media.example.com"];
+  assertEquals(
+    isAllowedHlsApiUrl(
+      "https://media.example.com/live/playlist.m3u8",
+      allowedHosts,
+    ),
+    true,
+  );
+  assertEquals(
+    isAllowedHlsApiUrl(
+      "https://edge.media.example.com/live/playlist.m3u8",
+      allowedHosts,
+    ),
+    true,
+  );
+  assertEquals(
+    isAllowedHlsApiUrl(
+      "https://untrusted.example.net/live/playlist.m3u8",
+      allowedHosts,
+    ),
+    false,
+  );
+});
+
+Deno.test("HLS API URL はローカル・プライベートIPを拒否する", () => {
+  for (
+    const hostname of [
+      "localhost",
+      "127.0.0.1",
+      "10.0.0.1",
+      "169.254.169.254",
+      "192.168.1.1",
+      "[::1]",
+      "[0:0:0:0:0:0:0:1]",
+      "[fd00::1]",
+    ]
+  ) {
+    assertEquals(
+      isAllowedHlsApiUrl(
+        `https://${hostname}/live/playlist.m3u8`,
+        [hostname.replace(/^\[|\]$/g, "")],
+      ),
+      false,
+    );
+  }
+});
+
+Deno.test("IPv6 接頭辞に似た通常のHLSホスト名は許可できる", () => {
+  for (const hostname of ["fdn.example.com", "fe80cdn.example.com"]) {
+    assertEquals(
+      isAllowedHlsApiUrl(
+        `https://${hostname}/live/playlist.m3u8`,
+        [hostname],
+      ),
+      true,
+    );
+  }
+});
 
 Deno.test("resolved cloud metadata bypasses provider lookup", async () => {
   const service = new MetadataReuseService();
