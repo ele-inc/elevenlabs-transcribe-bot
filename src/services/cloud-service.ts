@@ -14,6 +14,8 @@ export interface CloudFileMetadata {
 export interface CloudDownloadOptions {
   password?: string;
   performanceId?: string;
+  /** HLS の実取得時に許可するホスト。指定時は全参照先をローカルへ固定化する。 */
+  hlsAllowedHosts?: string[];
   /**
    * Metadata resolved earlier in the request. Passing it through avoids
    * repeating provider-specific metadata calls before download.

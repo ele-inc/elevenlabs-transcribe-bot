@@ -10,6 +10,7 @@ import type {
 } from "./transcription-job-contracts.ts";
 import { resolveMediaMimeType } from "../utils/utils.ts";
 import { getErrorMessage } from "../utils/errors.ts";
+import { config } from "../core/config.ts";
 
 export interface TranscriptionWorkerDependencies {
   jobs: TranscriptionJobStore;
@@ -35,6 +36,7 @@ export async function runTranscriptionJob(
   try {
     const download = await cloudServiceManager.downloadFromUrl(job.sourceUrl, {
       performanceId: job.id,
+      hlsAllowedHosts: config.transcriptionHlsAllowedHosts,
     });
     tempPath = download.tempPath;
     if (!download.success || !download.metadata || !download.tempPath) {

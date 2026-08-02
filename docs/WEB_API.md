@@ -36,7 +36,7 @@ make deploy
 - `TRANSCRIPTION_API_SERVICE_ACCOUNT`
 - `TRANSCRIPTION_WORKER_SERVICE_ACCOUNT`
 
-HLS URL を Web API から受け付ける場合は、`TRANSCRIPTION_HLS_ALLOWED_HOSTS` に許可するホストをセミコロン区切りで指定してください。未指定の場合、Web API の HLS 入力はすべて拒否します。`localhost`、プライベート IP、リンクローカル IP は許可リストに含めても拒否されます。
+HLS URL を Web API から受け付ける場合は、`TRANSCRIPTION_HLS_ALLOWED_HOSTS` に許可するホストをセミコロン区切りで指定してください。未指定の場合、Web API の HLS 入力はすべて拒否します。Workerでもリダイレクト、子マニフェスト、鍵、セグメントの取得先を検証します。`localhost`、プライベート IP、リンクローカル IP は許可リストに含めても拒否されます。
 
 ```bash
 export TRANSCRIPTION_HLS_ALLOWED_HOSTS="media.example.com;cdn.example.net"

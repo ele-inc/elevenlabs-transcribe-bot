@@ -1,5 +1,6 @@
 import {
   BaseCloudService,
+  type CloudDownloadOptions,
   CloudFileMetadata,
 } from "../services/cloud-service.ts";
 import {
@@ -28,12 +29,23 @@ export class HlsAdapter extends BaseCloudService {
     return extractHlsStreamId(url);
   }
 
-  async getFileMetadata(streamUrl: string): Promise<CloudFileMetadata> {
-    return await getHlsFileMetadata(streamUrl);
+  async getFileMetadata(
+    streamUrl: string,
+    opts?: CloudDownloadOptions,
+  ): Promise<CloudFileMetadata> {
+    return await getHlsFileMetadata(streamUrl, opts?.hlsAllowedHosts);
   }
 
-  async downloadFile(streamUrl: string, tempPath: string): Promise<boolean> {
-    await downloadHlsAudioToPath(streamUrl, tempPath);
+  async downloadFile(
+    streamUrl: string,
+    tempPath: string,
+    opts?: CloudDownloadOptions,
+  ): Promise<boolean> {
+    await downloadHlsAudioToPath(
+      streamUrl,
+      tempPath,
+      opts?.hlsAllowedHosts,
+    );
     return true;
   }
 

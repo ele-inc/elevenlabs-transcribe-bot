@@ -1,6 +1,9 @@
 import { CloudFileMetadata } from "../services/cloud-service.ts";
+import { assertAllowedHlsFetchUrl } from "../utils/hls-url-policy.ts";
 
 const decoder = new TextDecoder();
+const MAX_HLS_RESOURCES = 20_000;
+const MAX_HLS_REDIRECTS = 5;
 
 let ffmpegStatus: "unknown" | "available" | "missing" = "unknown";
 let ffmpegError: string | null = null;
@@ -143,10 +146,15 @@ async function verifyOutputFile(
 
 export async function getHlsFileMetadata(
   streamUrl: string,
+  allowedHosts?: string[],
 ): Promise<CloudFileMetadata> {
   await ensureFfmpegAvailable();
   const filename = deriveFilename(streamUrl);
-  const duration = await probeDuration(streamUrl);
+  // Workerでは実取得時に全参照先を検査する。ここでリモートURLをffprobeへ
+  // 渡すと検査を迂回するため、許可リスト指定時はdurationを省略する。
+  const duration = allowedHosts === undefined
+    ? await probeDuration(streamUrl)
+    : undefined;
 
   return {
     id: streamUrl,
@@ -174,49 +182,235 @@ export async function getHlsVideoMetadata(
 export async function downloadHlsAudioToPath(
   streamUrl: string,
   outputPath: string,
+  allowedHosts?: string[],
 ): Promise<void> {
   await ensureFfmpegAvailable();
 
-  const command = new Deno.Command("ffmpeg", {
-    args: [
-      "-y",
-      "-i",
-      streamUrl,
-      "-vn",
-      "-acodec",
-      "libmp3lame",
-      "-b:a",
-      "192k",
-      "-loglevel",
-      "error",
-      outputPath,
-    ],
-    stdout: "piped",
-    stderr: "piped",
-  });
-
-  const { success, stderr } = await command.output();
-  if (!success) {
-    const errorText = decoder.decode(stderr).trim();
-    throw new Error(
-      `Failed to download or convert HLS audio: ${
-        errorText || "Unknown error"
-      }`,
+  let bundleDirectory: string | undefined;
+  let inputUrl = streamUrl;
+  const inputArgs: string[] = [];
+  if (allowedHosts !== undefined) {
+    const bundle = await createValidatedHlsBundle(streamUrl, allowedHosts);
+    bundleDirectory = bundle.directory;
+    inputUrl = bundle.manifestPath;
+    inputArgs.push(
+      "-protocol_whitelist",
+      "file,crypto,data",
+      "-allowed_extensions",
+      "ALL",
     );
   }
 
   try {
-    const stat = await Deno.stat(outputPath);
-    if (!stat.isFile || stat.size === 0) {
-      throw new Error("Output file is empty after ffmpeg conversion");
+    const command = new Deno.Command("ffmpeg", {
+      args: [
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        ...inputArgs,
+        "-i",
+        inputUrl,
+        "-vn",
+        "-acodec",
+        "libmp3lame",
+        "-b:a",
+        "192k",
+        "-loglevel",
+        "error",
+        outputPath,
+      ],
+      stdout: "piped",
+      stderr: "piped",
+    });
+
+    const { success, stderr } = await command.output();
+    if (!success) {
+      const errorText = decoder.decode(stderr).trim();
+      throw new Error(
+        `Failed to download or convert HLS audio: ${
+          errorText || "Unknown error"
+        }`,
+      );
     }
+
+    await verifyOutputFile(outputPath, "HLS audio");
+  } finally {
+    if (bundleDirectory) {
+      await Deno.remove(bundleDirectory, { recursive: true }).catch(() => {});
+    }
+  }
+}
+
+interface HlsBundle {
+  directory: string;
+  manifestPath: string;
+}
+
+/**
+ * HLSの参照ツリーを検証しながらローカルへ固定化する。
+ * ffmpegにはローカルファイルだけを渡すため、未検証のリダイレクトや
+ * マニフェスト内URLへffmpeg自身が接続することはない。
+ */
+async function createValidatedHlsBundle(
+  streamUrl: string,
+  allowedHosts: string[],
+): Promise<HlsBundle> {
+  const directory = await Deno.makeTempDir({ prefix: "scribe-hls-" });
+  const resources = new Map<string, Promise<string>>();
+  let resourceCount = 0;
+
+  const saveResource = (
+    url: string,
+    forceManifest = false,
+  ): Promise<string> => {
+    const existing = resources.get(url);
+    if (existing) return existing;
+    if (++resourceCount > MAX_HLS_RESOURCES) {
+      return Promise.reject(
+        new Error(
+          `HLSの参照リソース数が上限 ${MAX_HLS_RESOURCES} を超えました`,
+        ),
+      );
+    }
+    const resourceId = resourceCount;
+
+    const promise = (async () => {
+      const { response, finalUrl } = await fetchValidatedHlsResource(
+        url,
+        allowedHosts,
+      );
+      const contentType = response.headers.get("content-type")?.toLowerCase() ||
+        "";
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const looksLikeManifest = forceManifest ||
+        contentType.includes("mpegurl") ||
+        decoder.decode(bytes.slice(0, 16)).trimStart().startsWith("#EXTM3U");
+      const extension = looksLikeManifest
+        ? ".m3u8"
+        : resourceExtension(finalUrl);
+      const filename = `resource-${resourceId}${extension}`;
+      const path = `${directory}/${filename}`;
+
+      if (!looksLikeManifest) {
+        await Deno.writeFile(path, bytes);
+        return filename;
+      }
+
+      const manifest = decoder.decode(bytes);
+      const rewritten = await rewriteHlsManifest(
+        manifest,
+        finalUrl,
+        saveResource,
+      );
+      await Deno.writeTextFile(path, rewritten);
+      return filename;
+    })();
+    resources.set(url, promise);
+    return promise;
+  };
+
+  try {
+    const manifestName = await saveResource(streamUrl, true);
+    return { directory, manifestPath: `${directory}/${manifestName}` };
   } catch (error) {
-    throw new Error(
-      `HLS audio output verification failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+    await Deno.remove(directory, { recursive: true }).catch(() => {});
+    throw error;
+  }
+}
+
+async function fetchValidatedHlsResource(
+  initialUrl: string,
+  allowedHosts: string[],
+): Promise<{ response: Response; finalUrl: string }> {
+  let currentUrl = initialUrl;
+  for (
+    let redirectCount = 0;
+    redirectCount <= MAX_HLS_REDIRECTS;
+    redirectCount++
+  ) {
+    await assertAllowedHlsFetchUrl(currentUrl, allowedHosts);
+    const response = await fetch(currentUrl, { redirect: "manual" });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      await response.body?.cancel();
+      if (!location) {
+        throw new Error("HLS取得先のリダイレクトにLocationがありません");
+      }
+      currentUrl = new URL(location, currentUrl).href;
+      continue;
+    }
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error(
+        `HLSリソースの取得に失敗しました: HTTP ${response.status}`,
+      );
+    }
+    return { response, finalUrl: currentUrl };
+  }
+  throw new Error(
+    `HLSリダイレクト回数が上限 ${MAX_HLS_REDIRECTS} を超えました`,
+  );
+}
+
+export async function rewriteHlsManifest(
+  manifest: string,
+  manifestUrl: string,
+  saveResource: (url: string) => Promise<string>,
+): Promise<string> {
+  const lines = manifest.split(/\r?\n/);
+  const rewritten: string[] = [];
+  for (const line of lines) {
+    if (!line.trim() || line.startsWith("#")) {
+      rewritten.push(
+        await rewriteUriAttributes(line, manifestUrl, saveResource),
+      );
+      continue;
+    }
+    rewritten.push(
+      await localizeHlsUri(line.trim(), manifestUrl, saveResource),
     );
   }
+  return rewritten.join("\n");
+}
+
+async function rewriteUriAttributes(
+  line: string,
+  manifestUrl: string,
+  saveResource: (url: string) => Promise<string>,
+): Promise<string> {
+  const pattern = /URI="([^"]+)"/g;
+  let result = "";
+  let lastIndex = 0;
+  for (const match of line.matchAll(pattern)) {
+    result += line.slice(lastIndex, match.index);
+    const localized = await localizeHlsUri(
+      match[1],
+      manifestUrl,
+      saveResource,
+    );
+    result += `URI="${localized}"`;
+    lastIndex = (match.index ?? 0) + match[0].length;
+  }
+  return result + line.slice(lastIndex);
+}
+
+async function localizeHlsUri(
+  uri: string,
+  manifestUrl: string,
+  saveResource: (url: string) => Promise<string>,
+): Promise<string> {
+  if (uri.startsWith("data:")) return uri;
+  const resolved = new URL(uri, manifestUrl);
+  if (resolved.protocol !== "https:") {
+    throw new Error(`HLS内にHTTPS以外の参照があります: ${resolved.href}`);
+  }
+  return await saveResource(resolved.href);
+}
+
+function resourceExtension(url: string): string {
+  const pathname = new URL(url).pathname;
+  const match = pathname.match(/\.[a-z0-9]{1,8}$/i);
+  return match?.[0] || ".bin";
 }
 
 export async function downloadHlsVideoToPath(
