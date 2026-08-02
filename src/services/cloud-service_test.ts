@@ -71,6 +71,7 @@ Deno.test("HLS API URL はローカル・プライベートIPを拒否する", (
       "169.254.169.254",
       "192.168.1.1",
       "[::1]",
+      "[0:0:0:0:0:0:0:1]",
       "[fd00::1]",
     ]
   ) {
@@ -80,6 +81,18 @@ Deno.test("HLS API URL はローカル・プライベートIPを拒否する", (
         [hostname.replace(/^\[|\]$/g, "")],
       ),
       false,
+    );
+  }
+});
+
+Deno.test("IPv6 接頭辞に似た通常のHLSホスト名は許可できる", () => {
+  for (const hostname of ["fdn.example.com", "fe80cdn.example.com"]) {
+    assertEquals(
+      isAllowedHlsApiUrl(
+        `https://${hostname}/live/playlist.m3u8`,
+        [hostname],
+      ),
+      true,
     );
   }
 });

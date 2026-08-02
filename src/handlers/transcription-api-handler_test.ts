@@ -13,6 +13,7 @@ import {
   type TranscriptionResultStore,
 } from "../services/transcription-job-contracts.ts";
 import { assertEquals } from "@std/assert";
+import { AuthenticationError } from "../utils/errors.ts";
 
 class MemoryJobStore implements TranscriptionJobStore {
   readonly values = new Map<string, TranscriptionJob>();
@@ -202,6 +203,31 @@ Deno.test("呼び出し元が異なれば同じ Idempotency-Key でも別ジョ�
   const firstBody = await first.json();
   const secondBody = await second.json();
   assertEquals(firstBody.id === secondBody.id, false);
+});
+
+Deno.test("呼び出し元の認証に失敗すると401を返す", async () => {
+  const jobs = new MemoryJobStore();
+  const handler = createTranscriptionApiHandler({
+    jobs,
+    results: new MemoryResultStore(),
+    dispatcher: new FakeDispatcher(),
+    isSupportedUrl: (url) => url.includes("example.com"),
+    getCallerId: () =>
+      Promise.reject(new AuthenticationError("Bearer ID トークンが必要です")),
+  });
+
+  const response = await handler(
+    new Request("https://api.test/v1/transcription-jobs", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "meeting-123",
+      },
+      body: JSON.stringify({ sourceUrl: "https://example.com/audio.mp3" }),
+    }),
+  );
+  assertEquals(response.status, 401);
+  assertEquals(jobs.values.size, 0);
 });
 
 Deno.test("同じ Idempotency-Key の内容が異なる場合は409を返す", async () => {

@@ -183,42 +183,14 @@ async function createJob(
     }
   }
 
-  if (job.status === "failed") {
-    const reset: Partial<TranscriptionJob> = {
-      status: "queued",
-      attempts: 0,
-      dispatchOperationName: undefined,
-      startedAt: undefined,
-      completedAt: undefined,
-      workerExecution: undefined,
-      error: undefined,
-    };
-    await dependencies.jobs.update(job.id, reset);
-    job = { ...job, ...reset };
-  }
-
-  try {
-    const dispatchOperationName = await dependencies.dispatcher.dispatch(
-      job.id,
-    );
-    await dependencies.jobs.update(job.id, {
-      dispatchOperationName,
-      error: undefined,
-    });
-    job = { ...job, dispatchOperationName, error: undefined };
-  } catch (error) {
-    const message = `文字起こしワーカーを開始できませんでした: ${
-      getErrorMessage(error)
-    }`;
-    await dependencies.jobs.update(job.id, {
-      status: "failed",
-      error: message,
-      completedAt: new Date().toISOString(),
-    });
-    return jsonResponse(
-      { ...publicJob(job), status: "failed", error: message },
-      503,
-    );
+  const dispatch = await requeueJob(
+    job.id,
+    dependencies,
+    "文字起こしワーカーを開始できませんでした",
+  );
+  job = { ...job, ...dispatch };
+  if (dispatch.status === "failed") {
+    return jsonResponse(publicJob(job), 503);
   }
 
   return jsonResponse(publicJob(job), 202, {
@@ -276,45 +248,74 @@ async function retryJob(
     );
   }
 
-  await dependencies.jobs.update(jobId, {
-    status: "queued",
-    attempts: 0,
+  const dispatch = await requeueJob(
+    jobId,
+    dependencies,
+    "文字起こしワーカーを再開できませんでした",
+  );
+  if (dispatch.status === "failed") {
+    return jsonResponse({ error: dispatch.error }, 503);
+  }
+  return jsonResponse(publicJob({ ...job, ...dispatch }), 202, {
+    Location: `/v1/transcription-jobs/${jobId}`,
+    "Cache-Control": "no-store",
+  });
+}
+
+type RequeueJobResult =
+  | {
+    status: "queued";
+    attempts: 0;
+    dispatchOperationName: string;
+    startedAt: undefined;
+    completedAt: undefined;
+    workerExecution: undefined;
+    error: undefined;
+  }
+  | {
+    status: "failed";
+    attempts: 0;
+    dispatchOperationName: undefined;
+    startedAt: undefined;
+    completedAt: string;
+    workerExecution: undefined;
+    error: string;
+  };
+
+async function requeueJob(
+  jobId: string,
+  dependencies: TranscriptionApiDependencies,
+  failureMessage: string,
+): Promise<RequeueJobResult> {
+  const reset = {
+    status: "queued" as const,
+    attempts: 0 as const,
+    dispatchOperationName: undefined,
     startedAt: undefined,
     completedAt: undefined,
     workerExecution: undefined,
-    dispatchOperationName: undefined,
     error: undefined,
-  });
+  };
+  await dependencies.jobs.update(jobId, reset);
+
   try {
     const dispatchOperationName = await dependencies.dispatcher.dispatch(jobId);
     await dependencies.jobs.update(jobId, { dispatchOperationName });
-    return jsonResponse(
-      publicJob({
-        ...job,
-        status: "queued",
-        attempts: 0,
-        dispatchOperationName,
-        startedAt: undefined,
-        completedAt: undefined,
-        workerExecution: undefined,
-        error: undefined,
-      }),
-      202,
-      {
-        Location: `/v1/transcription-jobs/${jobId}`,
-        "Cache-Control": "no-store",
-      },
-    );
+    return { ...reset, dispatchOperationName };
   } catch (error) {
-    const message = `文字起こしワーカーを再開できませんでした: ${
-      getErrorMessage(error)
-    }`;
+    const completedAt = new Date().toISOString();
+    const message = `${failureMessage}: ${getErrorMessage(error)}`;
     await dependencies.jobs.update(jobId, {
       status: "failed",
       error: message,
-      completedAt: new Date().toISOString(),
+      completedAt,
     });
-    return jsonResponse({ error: message }, 503);
+    return {
+      ...reset,
+      status: "failed",
+      completedAt,
+      error: message,
+    };
   }
 }
 

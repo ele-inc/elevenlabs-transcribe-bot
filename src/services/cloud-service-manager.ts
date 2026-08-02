@@ -14,7 +14,7 @@ import { GoogleDriveAdapter } from "../adapters/google-drive-adapter.ts";
 import { TempFileManager } from "./temp-file-manager.ts";
 import { DropboxAdapter } from "../adapters/dropbox-adapter.ts";
 import { YouTubeAdapter } from "../adapters/youtube-adapter.ts";
-import { HlsAdapter } from "../adapters/hls-adapter.ts";
+import { HLS_SERVICE_NAME, HlsAdapter } from "../adapters/hls-adapter.ts";
 import { UtageAdapter } from "../adapters/utage-adapter.ts";
 import { VimeoReviewAdapter } from "../adapters/vimeo-review-adapter.ts";
 import { getErrorMessage } from "../utils/errors.ts";
@@ -58,7 +58,7 @@ export class CloudServiceManager {
   isApiSourceUrlSupported(url: string): boolean {
     const service = cloudServiceRegistry.getServiceForUrl(url);
     if (!service) return false;
-    if (service.name !== "HLS") return true;
+    if (service.name !== HLS_SERVICE_NAME) return true;
 
     return isAllowedHlsApiUrl(url, config.transcriptionHlsAllowedHosts);
   }

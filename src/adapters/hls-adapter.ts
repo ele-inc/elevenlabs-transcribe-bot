@@ -1,4 +1,7 @@
-import { BaseCloudService, CloudFileMetadata } from "../services/cloud-service.ts";
+import {
+  BaseCloudService,
+  CloudFileMetadata,
+} from "../services/cloud-service.ts";
 import {
   downloadHlsAudioToPath,
   extractHlsStreamId,
@@ -6,8 +9,11 @@ import {
   isHlsUrl,
 } from "../clients/hls.ts";
 
+/** HLS アダプターを識別する安定したサービス名。 */
+export const HLS_SERVICE_NAME = "HLS";
+
 export class HlsAdapter extends BaseCloudService {
-  readonly name = "HLS";
+  readonly name = HLS_SERVICE_NAME;
   readonly description =
     "HLS 動画ストリーム（.m3u8 マニフェスト）。ffmpeg で音声を抽出。";
   readonly urlExamples = [

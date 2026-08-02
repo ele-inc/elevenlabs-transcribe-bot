@@ -112,7 +112,7 @@ make deploy
 gcloud run deploy scribe-bot \
   --source . \
   --region asia-northeast1 \
-  --allow-unauthenticated
+  --no-allow-unauthenticated
 ```
 
 ### 4. Slack アプリの設定

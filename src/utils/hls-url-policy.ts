@@ -28,11 +28,21 @@ function normalizeHostname(hostname: string): string {
 function isPrivateOrLocalHostname(hostname: string): boolean {
   if (
     hostname === "localhost" || hostname.endsWith(".localhost") ||
-    hostname.endsWith(".local") || hostname === "::1" ||
-    hostname.startsWith("fc") || hostname.startsWith("fd") ||
-    /^fe[89ab]/.test(hostname)
+    hostname.endsWith(".local")
   ) {
     return true;
+  }
+
+  if (hostname.includes(":")) {
+    if (
+      hostname === "::" || hostname === "::1" ||
+      hostname === "0:0:0:0:0:0:0:0" ||
+      hostname === "0:0:0:0:0:0:0:1" ||
+      hostname.startsWith("fc") || hostname.startsWith("fd") ||
+      /^fe[89ab]/.test(hostname)
+    ) {
+      return true;
+    }
   }
 
   const ipv4Text = hostname.startsWith("::ffff:")
