@@ -47,6 +47,16 @@ Deno.test("HLSマニフェスト内のHTTPS以外の参照を拒否する", asyn
   );
 });
 
+Deno.test("HLSマニフェスト内のdata URIはそのまま維持する", async () => {
+  const dataUri = "data:text/plain;base64,c2VjcmV0";
+  const rewritten = await rewriteHlsManifest(
+    `#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="${dataUri}"`,
+    "https://media.example.com/root.m3u8",
+    () => Promise.reject(new Error("data URIを取得しようとしました")),
+  );
+  assertEquals(rewritten.includes(dataUri), true);
+});
+
 Deno.test("許可ホストでもDNS解決先がプライベートIPなら拒否する", async () => {
   await assertRejects(
     () =>
@@ -67,5 +77,18 @@ Deno.test("許可ホストの公開IPは取得先として受け付ける", asyn
     ["media.example.com"],
     (_hostname, recordType) =>
       Promise.resolve(recordType === "A" ? ["8.8.8.8"] : []),
+  );
+});
+
+Deno.test("DNS解決結果が空なら取得先を拒否する", async () => {
+  await assertRejects(
+    () =>
+      assertAllowedHlsFetchUrl(
+        "https://media.example.com/segment.ts",
+        ["media.example.com"],
+        () => Promise.resolve([]),
+      ),
+    Error,
+    "DNS解決結果を確認できません",
   );
 });

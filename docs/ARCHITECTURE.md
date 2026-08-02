@@ -8,7 +8,7 @@
 | `scribe-api` | Cloud Run Service | サービス間認証、入力検証、ジョブ状態・結果API、Worker起動 | メディア処理、文字起こし本体、Botイベント |
 | `scribe-transcription-worker` | Cloud Run Job | メディア取得、文字起こし、任意の要約、結果保存 | 外部HTTP API、Bot応答 |
 
-コードは同じコンテナイメージを使いますが、エントリーポイント、環境変数、割り当てリソース、IAM境界を分けてデプロイします。API と Worker にはそれぞれ専用サービスアカウントを割り当て、API はジョブ状態の読み書き・結果の読み取り・Worker起動、Workerはジョブ状態と結果の書き込み・文字起こし用シークレット参照だけを行います。WorkerのSecret Manager権限も使用するシークレット単位で付与し、Bot用のSlack・DiscordシークレットはAPIとWorkerへ渡しません。
+コードは同じコンテナイメージを使いますが、エントリーポイント、環境変数、割り当てリソース、IAM境界を分けてデプロイします。API と Worker にはそれぞれ専用サービスアカウントを割り当て、API はジョブ状態の読み書き・結果の読み取り・Worker起動、Workerはジョブ状態と結果の書き込み・文字起こし用シークレット参照だけを行います。結果バケットへのアクセスは `transcription-results/` 配下だけに限定し、WorkerのSecret Manager権限も使用するシークレット単位で付与します。Bot用のSlack・DiscordシークレットはAPIとWorkerへ渡しません。
 
 ```text
 外部サービス

@@ -4,6 +4,7 @@ import { assertAllowedHlsFetchUrl } from "../utils/hls-url-policy.ts";
 const decoder = new TextDecoder();
 const MAX_HLS_RESOURCES = 20_000;
 const MAX_HLS_REDIRECTS = 5;
+const HLS_FETCH_TIMEOUT_MS = 30_000;
 
 let ffmpegStatus: "unknown" | "available" | "missing" = "unknown";
 let ffmpegError: string | null = null;
@@ -257,6 +258,7 @@ async function createValidatedHlsBundle(
 ): Promise<HlsBundle> {
   const directory = await Deno.makeTempDir({ prefix: "scribe-hls-" });
   const resources = new Map<string, Promise<string>>();
+  const inProgress = new Set<string>();
   let resourceCount = 0;
 
   const saveResource = (
@@ -264,7 +266,14 @@ async function createValidatedHlsBundle(
     forceManifest = false,
   ): Promise<string> => {
     const existing = resources.get(url);
-    if (existing) return existing;
+    if (existing) {
+      if (inProgress.has(url)) {
+        return Promise.reject(
+          new Error(`HLSマニフェストが循環参照しています: ${url}`),
+        );
+      }
+      return existing;
+    }
     if (++resourceCount > MAX_HLS_RESOURCES) {
       return Promise.reject(
         new Error(
@@ -273,6 +282,7 @@ async function createValidatedHlsBundle(
       );
     }
     const resourceId = resourceCount;
+    inProgress.add(url);
 
     const promise = (async () => {
       const { response, finalUrl } = await fetchValidatedHlsResource(
@@ -304,7 +314,7 @@ async function createValidatedHlsBundle(
       );
       await Deno.writeTextFile(path, rewritten);
       return filename;
-    })();
+    })().finally(() => inProgress.delete(url));
     resources.set(url, promise);
     return promise;
   };
@@ -329,7 +339,10 @@ async function fetchValidatedHlsResource(
     redirectCount++
   ) {
     await assertAllowedHlsFetchUrl(currentUrl, allowedHosts);
-    const response = await fetch(currentUrl, { redirect: "manual" });
+    const response = await fetch(currentUrl, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(HLS_FETCH_TIMEOUT_MS),
+    });
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get("location");
       await response.body?.cancel();

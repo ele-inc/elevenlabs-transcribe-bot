@@ -14,6 +14,8 @@ make deploy
 ./scripts/setup-transcription-api.sh
 ```
 
+初回セットアップで未作成のWorker用シークレットがある場合、スクリプトはシークレットの入れ物を作成して、値の登録方法を表示して終了します。値を登録してから同じスクリプトを再実行し、その後にデプロイしてください。
+
 既定の実行単位とリソースは次のとおりです。
 
 - Bot サービス: `scribe-bot`
@@ -25,6 +27,8 @@ make deploy
 - Firestore コレクション: `transcription_jobs`
 - 結果バケット: `${GCP_PROJECT_ID}-scribe-results`
 - リージョン: `asia-northeast1`
+
+結果バケットでは、APIの読み取りとWorkerの書き込みを `transcription-results/` 配下だけにIAM条件で限定します。Workerのカスタムロールには、結果の新規保存と再試行時の上書きに必要な `storage.objects.create` と `storage.objects.delete` だけを含めます。
 
 必要に応じて、次の環境変数で上書きできます。
 
