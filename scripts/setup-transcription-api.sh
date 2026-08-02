@@ -3,19 +3,36 @@ set -euo pipefail
 
 PROJECT_ID="${GCP_PROJECT_ID:-automatic-recording-of-minutes}"
 REGION="${GCP_REGION:-asia-northeast1}"
-SERVICE="scribe-bot"
+SERVICE="scribe-api"
 JOB_NAME="${TRANSCRIPTION_JOB_NAME:-scribe-transcription-worker}"
 RESULTS_BUCKET="${TRANSCRIPTION_RESULTS_BUCKET:-${PROJECT_ID}-scribe-results}"
+API_SERVICE_ACCOUNT="${TRANSCRIPTION_API_SERVICE_ACCOUNT:-scribe-api-runtime@${PROJECT_ID}.iam.gserviceaccount.com}"
+WORKER_SERVICE_ACCOUNT="${TRANSCRIPTION_WORKER_SERVICE_ACCOUNT:-scribe-worker-runtime@${PROJECT_ID}.iam.gserviceaccount.com}"
 
-PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
-RUNTIME_SERVICE_ACCOUNT="${TRANSCRIPTION_RUNTIME_SERVICE_ACCOUNT:-${PROJECT_NUMBER}-compute@developer.gserviceaccount.com}"
-
-echo "Firestore、Cloud Run、Cloud Storage API を有効化しています..."
+echo "Firestore、Cloud Run、Cloud Storage、IAM、Secret Manager API を有効化しています..."
 gcloud services enable \
   firestore.googleapis.com \
+  iam.googleapis.com \
   run.googleapis.com \
+  secretmanager.googleapis.com \
   storage.googleapis.com \
   --project="$PROJECT_ID"
+
+ensure_service_account() {
+  local email="$1"
+  local account_id="${email%%@*}"
+  local display_name="$2"
+  if ! gcloud iam service-accounts describe "$email" \
+    --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "サービスアカウント $email を作成しています..."
+    gcloud iam service-accounts create "$account_id" \
+      --project="$PROJECT_ID" \
+      --display-name="$display_name"
+  fi
+}
+
+ensure_service_account "$API_SERVICE_ACCOUNT" "Scribe transcription API"
+ensure_service_account "$WORKER_SERVICE_ACCOUNT" "Scribe transcription worker"
 
 if ! gcloud firestore databases describe \
   --project="$PROJECT_ID" \
@@ -37,27 +54,50 @@ if ! gcloud storage buckets describe "gs://${RESULTS_BUCKET}" \
     --uniform-bucket-level-access
 fi
 
-echo "実行サービスアカウントへジョブ状態と結果のアクセス権を付与しています..."
+echo "API サービスアカウントへジョブ状態の管理権限と結果の読取権限を付与しています..."
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
+  --member="serviceAccount:${API_SERVICE_ACCOUNT}" \
   --role='roles/datastore.user' >/dev/null
 gcloud storage buckets add-iam-policy-binding "gs://${RESULTS_BUCKET}" \
-  --member="serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
+  --member="serviceAccount:${API_SERVICE_ACCOUNT}" \
+  --role='roles/storage.objectViewer' >/dev/null
+
+echo "Worker サービスアカウントへ処理・結果保存・シークレット参照権限を付与しています..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${WORKER_SERVICE_ACCOUNT}" \
+  --role='roles/datastore.user' >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${WORKER_SERVICE_ACCOUNT}" \
+  --role='roles/secretmanager.secretAccessor' >/dev/null
+gcloud storage buckets add-iam-policy-binding "gs://${RESULTS_BUCKET}" \
+  --member="serviceAccount:${WORKER_SERVICE_ACCOUNT}" \
   --role='roles/storage.objectAdmin' >/dev/null
+
+CLOUD_BUILD_SERVICE_ACCOUNT=$(gcloud builds get-default-service-account \
+  --project="$PROJECT_ID" 2>/dev/null || true)
+if [ -n "$CLOUD_BUILD_SERVICE_ACCOUNT" ]; then
+  echo "Cloud Build へ API・Worker サービスアカウントの使用権限を付与しています..."
+  for runtime_account in "$API_SERVICE_ACCOUNT" "$WORKER_SERVICE_ACCOUNT"; do
+    gcloud iam service-accounts add-iam-policy-binding "$runtime_account" \
+      --project="$PROJECT_ID" \
+      --member="serviceAccount:${CLOUD_BUILD_SERVICE_ACCOUNT}" \
+      --role='roles/iam.serviceAccountUser' >/dev/null
+  done
+fi
 
 if gcloud run jobs describe "$JOB_NAME" \
   --project="$PROJECT_ID" --region="$REGION" >/dev/null 2>&1; then
-  echo "API のサービスアカウントへワーカージョブの実行権限を付与しています..."
+  echo "API サービスアカウントへワーカージョブの実行権限を付与しています..."
   gcloud run jobs add-iam-policy-binding "$JOB_NAME" \
     --project="$PROJECT_ID" \
     --region="$REGION" \
-    --member="serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
+    --member="serviceAccount:${API_SERVICE_ACCOUNT}" \
     --role='roles/run.jobsExecutorWithOverrides' >/dev/null
 else
   echo "ワーカージョブは未デプロイです。make deploy の後にこのスクリプトを再実行してください。"
 fi
 
 echo "文字起こし API の基盤準備が完了しました。"
-echo "サービス: ${SERVICE}"
-echo "ワーカージョブ: ${JOB_NAME}"
+echo "API サービス: ${SERVICE} (${API_SERVICE_ACCOUNT})"
+echo "ワーカージョブ: ${JOB_NAME} (${WORKER_SERVICE_ACCOUNT})"
 echo "結果バケット: gs://${RESULTS_BUCKET}"

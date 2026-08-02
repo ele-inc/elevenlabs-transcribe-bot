@@ -28,11 +28,20 @@ docker-run: build
 
 # Cache Deno dependencies
 install:
-	cd src && deno cache index.ts
+	cd src && deno cache index.ts api-server.ts job-worker.ts
 
 # Reload Deno cache
 reload-cache:
-	deno cache --reload ./src/index.ts
+	deno cache --reload ./src/index.ts ./src/api-server.ts ./src/job-worker.ts
+
+# 文字起こし API を別ポートでローカル起動
+api-dev:
+	@echo "🔌 Starting local transcription API on :8081..."
+	@cd src && PORT=8081 deno run --allow-net --allow-env --allow-read api-server.ts
+
+# 文字起こし API のデプロイ状態を表示
+api-status:
+	@gcloud run services describe scribe-api --region asia-northeast1 --format="table(status.url,status.traffic.percent,spec.template.spec.containers[0].image)"
 
 # Show deployment status
 status:
@@ -128,10 +137,12 @@ help:
 	@echo "Available commands:"
 	@echo "  make deploy          - Deploy to Cloud Run with .env variables"
 	@echo "  make dev             - Start local development server"
+	@echo "  make api-dev         - Start local transcription API on port 8081"
 	@echo "  make build           - Build Docker image locally"
 	@echo "  make docker-run      - Run Docker container locally"
 	@echo "  make install         - Cache Deno dependencies"
 	@echo "  make status          - Show Cloud Run deployment status"
+	@echo "  make api-status      - Show transcription API deployment status"
 	@echo "  make env             - Show current environment variables"
 	@echo "  make logs            - Show recent Cloud Run logs"
 	@echo "  make transcribe      - Transcribe audio/video files locally (Mac環境)"

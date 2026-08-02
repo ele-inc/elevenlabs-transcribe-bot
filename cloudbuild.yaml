@@ -7,7 +7,7 @@ steps:
       - |
         set -euo pipefail
 
-        SECRETS=(
+        BOT_SECRETS=(
           ELEVENLABS_API_KEY
           SLACK_BOT_TOKEN
           DISCORD_BOT_TOKEN
@@ -21,19 +21,47 @@ steps:
           YOUTUBE_PROXY
           YOUTUBE_COOKIES_BASE64
         )
+        WORKER_SECRETS=(
+          ELEVENLABS_API_KEY
+          GOOGLE_CLIENT_EMAIL
+          GOOGLE_IMPERSONATE_EMAIL
+          GOOGLE_PRIVATE_KEY
+          GOOGLE_GENERATIVE_AI_API_KEY
+          YOUTUBE_PROXY
+          YOUTUBE_COOKIES_BASE64
+        )
 
-        mapping=""
-        for name in "$${SECRETS[@]}"; do
-          mapping+="$${name}=$${name}:latest,"
+        bot_mapping=""
+        for name in "$${BOT_SECRETS[@]}"; do
+          bot_mapping+="$${name}=$${name}:latest,"
         done
-        mapping="$${mapping%,}"
+        bot_mapping="$${bot_mapping%,}"
 
-        RESULTS_BUCKET="$PROJECT_ID-scribe-results"
+        worker_mapping=""
+        for name in "$${WORKER_SECRETS[@]}"; do
+          worker_mapping+="$${name}=$${name}:latest,"
+        done
+        worker_mapping="$${worker_mapping%,}"
+
+        BOT_SERVICE="scribe-bot"
+        API_SERVICE="scribe-api"
         JOB_NAME="scribe-transcription-worker"
+        API_SERVICE_ACCOUNT="$_TRANSCRIPTION_API_SERVICE_ACCOUNT"
+        WORKER_SERVICE_ACCOUNT="$_TRANSCRIPTION_WORKER_SERVICE_ACCOUNT"
+        if [ -z "$${API_SERVICE_ACCOUNT}" ]; then
+          API_SERVICE_ACCOUNT="scribe-api-runtime@$PROJECT_ID.iam.gserviceaccount.com"
+        fi
+        if [ -z "$${WORKER_SERVICE_ACCOUNT}" ]; then
+          WORKER_SERVICE_ACCOUNT="scribe-worker-runtime@$PROJECT_ID.iam.gserviceaccount.com"
+        fi
+        RESULTS_BUCKET="$PROJECT_ID-scribe-results"
+        JOBS_COLLECTION="$_TRANSCRIPTION_JOBS_COLLECTION"
         HLS_ALLOWED_HOSTS="$_TRANSCRIPTION_HLS_ALLOWED_HOSTS"
-        RUNTIME_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8,GEMINI_MODEL=gemini-3.6-flash,GCP_REGION=asia-northeast1,TRANSCRIPTION_JOB_NAME=$${JOB_NAME},TRANSCRIPTION_RESULTS_BUCKET=$${RESULTS_BUCKET},TRANSCRIPTION_HLS_ALLOWED_HOSTS=$${HLS_ALLOWED_HOSTS}"
+        BOT_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8,GEMINI_MODEL=gemini-3.6-flash,GCP_REGION=asia-northeast1"
+        API_ENV="GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=asia-northeast1,TRANSCRIPTION_JOB_NAME=$${JOB_NAME},TRANSCRIPTION_JOBS_COLLECTION=$${JOBS_COLLECTION},TRANSCRIPTION_RESULTS_BUCKET=$${RESULTS_BUCKET},TRANSCRIPTION_HLS_ALLOWED_HOSTS=$${HLS_ALLOWED_HOSTS}"
+        WORKER_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8,GEMINI_MODEL=gemini-3.6-flash,GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=asia-northeast1,TRANSCRIPTION_JOBS_COLLECTION=$${JOBS_COLLECTION},TRANSCRIPTION_RESULTS_BUCKET=$${RESULTS_BUCKET}"
 
-        gcloud run deploy scribe-bot \
+        gcloud run deploy "$${BOT_SERVICE}" \
           --project="$PROJECT_ID" \
           --source=. \
           --region=asia-northeast1 \
@@ -48,10 +76,10 @@ steps:
           --min-instances=0 \
           --max-instances=1 \
           --port=8080 \
-          --set-env-vars="$${RUNTIME_ENV}" \
-          --set-secrets="$${mapping}"
+          --set-env-vars="$${BOT_ENV}" \
+          --set-secrets="$${bot_mapping}"
 
-        SERVICE_IMAGE="$$(gcloud run services describe scribe-bot \
+        SERVICE_IMAGE="$$(gcloud run services describe "$${BOT_SERVICE}" \
           --project="$PROJECT_ID" \
           --region=asia-northeast1 \
           --format='value(spec.template.spec.containers[0].image)')"
@@ -67,8 +95,27 @@ steps:
           --tasks=1 \
           --max-retries=1 \
           --task-timeout=7200s \
-          --set-env-vars="$${RUNTIME_ENV}" \
-          --set-secrets="$${mapping}"
+          --service-account="$${WORKER_SERVICE_ACCOUNT}" \
+          --set-env-vars="$${WORKER_ENV}" \
+          --set-secrets="$${worker_mapping}"
+
+        gcloud run deploy "$${API_SERVICE}" \
+          --project="$PROJECT_ID" \
+          --region=asia-northeast1 \
+          --image="$${SERVICE_IMAGE}" \
+          --command=deno \
+          --args=run,--allow-net,--allow-env,--allow-read,api-server.ts \
+          --memory=1Gi \
+          --cpu=1 \
+          --concurrency=80 \
+          --timeout=60 \
+          --no-allow-unauthenticated \
+          --execution-environment=gen2 \
+          --min-instances=0 \
+          --max-instances=10 \
+          --port=8080 \
+          --service-account="$${API_SERVICE_ACCOUNT}" \
+          --set-env-vars="$${API_ENV}"
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -76,4 +123,7 @@ options:
 timeout: 3600s
 
 substitutions:
+  _TRANSCRIPTION_API_SERVICE_ACCOUNT: ""
   _TRANSCRIPTION_HLS_ALLOWED_HOSTS: ""
+  _TRANSCRIPTION_JOBS_COLLECTION: "transcription_jobs"
+  _TRANSCRIPTION_WORKER_SERVICE_ACCOUNT: ""

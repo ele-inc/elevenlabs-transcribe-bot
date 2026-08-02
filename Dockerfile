@@ -13,7 +13,7 @@ WORKDIR /app
 COPY src/ ./
 
 # Cache dependencies
-RUN deno cache index.ts job-worker.ts
+RUN deno cache index.ts api-server.ts job-worker.ts
 
 # Cloud Run uses PORT env variable (default 8080)
 EXPOSE 8080

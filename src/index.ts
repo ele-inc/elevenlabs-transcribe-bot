@@ -4,7 +4,6 @@ import { handleSlackInteractions } from "./handlers/slack-interaction-handler.ts
 import { config } from "./core/config.ts";
 import { methodNotAllowed, textResponse } from "./utils/http-utils.ts";
 import { installGracefulShutdown } from "./services/concurrency-limiter.ts";
-import { handleTranscriptionApi } from "./handlers/transcription-api-handler.ts";
 
 console.log(`Function "elevenlabs-scribe-bot" up and running!`);
 
@@ -23,15 +22,6 @@ Deno.serve({ port }, async (req) => {
   // Health check endpoint
   if (pathname === "/" && req.method === "GET") {
     return textResponse("ElevenLabs Scribe Bot is running!");
-  }
-
-  // サービス間文字起こし API。認証は、このハンドラーへ到達する前に
-  // Cloud Run IAM が実施する。
-  if (
-    pathname === "/v1/transcription-jobs" ||
-    pathname.startsWith("/v1/transcription-jobs/")
-  ) {
-    return await handleTranscriptionApi(req);
   }
 
   // Discord endpoint

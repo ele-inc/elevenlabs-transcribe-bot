@@ -10,7 +10,7 @@ servers:
     description: Cloud Run サービス
     variables:
       serviceUrl:
-        default: https://scribe-bot.example.run.app
+        default: https://scribe-api.example.run.app
         description: デプロイ済みCloud RunサービスのURL
 security:
   - bearerAuth: []
