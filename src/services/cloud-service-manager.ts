@@ -19,6 +19,8 @@ import { UtageAdapter } from "../adapters/utage-adapter.ts";
 import { VimeoReviewAdapter } from "../adapters/vimeo-review-adapter.ts";
 import { getErrorMessage } from "../utils/errors.ts";
 import { elapsedMs, logPerformance } from "../utils/performance.ts";
+import { config } from "../core/config.ts";
+import { isAllowedHlsApiUrl } from "../utils/hls-url-policy.ts";
 
 export class CloudServiceManager {
   private tempManager = new TempFileManager();
@@ -50,6 +52,15 @@ export class CloudServiceManager {
    */
   isSupportedUrl(url: string): boolean {
     return cloudServiceRegistry.getServiceForUrl(url) !== null;
+  }
+
+  /** Web API から安全に受け付けられる入力 URL かを判定する。 */
+  isApiSourceUrlSupported(url: string): boolean {
+    const service = cloudServiceRegistry.getServiceForUrl(url);
+    if (!service) return false;
+    if (service.name !== "HLS") return true;
+
+    return isAllowedHlsApiUrl(url, config.transcriptionHlsAllowedHosts);
   }
 
   /**
@@ -187,5 +198,5 @@ export class CloudServiceManager {
   }
 }
 
-// Singleton instance
+// シングルトン
 export const cloudServiceManager = new CloudServiceManager();

@@ -16,6 +16,7 @@ export interface TranscriptionWorkerDependencies {
   results: TranscriptionResultStore;
 }
 
+/** ジョブを取得し、ダウンロード・文字起こし・結果保存まで実行する。 */
 export async function runTranscriptionJob(
   jobId: string,
   dependencies: TranscriptionWorkerDependencies = {
@@ -26,7 +27,7 @@ export async function runTranscriptionJob(
   const workerExecution = Deno.env.get("CLOUD_RUN_EXECUTION") || undefined;
   const job = await dependencies.jobs.claim(jobId, 2, workerExecution);
   if (!job) {
-    console.log(`Job ${jobId} is already owned, completed, or exhausted`);
+    console.log(`ジョブ ${jobId} は処理中、完了済み、または試行回数上限です`);
     return "skipped";
   }
 
@@ -37,7 +38,9 @@ export async function runTranscriptionJob(
     });
     tempPath = download.tempPath;
     if (!download.success || !download.metadata || !download.tempPath) {
-      throw new Error(download.error || "Failed to download source media");
+      throw new Error(
+        download.error || "入力メディアのダウンロードに失敗しました",
+      );
     }
 
     const mimeType = resolveMediaMimeType(
@@ -59,7 +62,14 @@ export async function runTranscriptionJob(
       timings: transcription.timings,
     };
     if (job.options.summarize && transcription.transcript) {
-      result.summary = await summarizeTranscript(transcription.transcript);
+      try {
+        result.summary = await summarizeTranscript(transcription.transcript);
+      } catch (summaryError) {
+        console.error(
+          `ジョブ ${job.id} の要約生成に失敗しました:`,
+          summaryError,
+        );
+      }
     }
 
     const resultObject = await dependencies.results.save(job.id, result);
@@ -73,7 +83,7 @@ export async function runTranscriptionJob(
       resultObject,
       error: undefined,
     });
-    console.log(`Transcription job ${job.id} completed`);
+    console.log(`文字起こしジョブ ${job.id} が完了しました`);
     return "completed";
   } catch (error) {
     const message = getErrorMessage(error);
@@ -82,7 +92,7 @@ export async function runTranscriptionJob(
       completedAt: new Date().toISOString(),
       error: message,
     });
-    console.error(`Transcription job ${job.id} failed:`, error);
+    console.error(`文字起こしジョブ ${job.id} が失敗しました:`, error);
     throw error;
   } finally {
     if (tempPath) {

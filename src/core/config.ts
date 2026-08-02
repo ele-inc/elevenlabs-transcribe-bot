@@ -8,12 +8,13 @@ interface Config {
   port: number;
   maxConcurrentTranscriptions: number;
 
-  // Durable transcription API
+  // 永続化文字起こし API
   gcpProjectId?: string;
   gcpRegion: string;
   transcriptionJobName: string;
   transcriptionJobsCollection: string;
   transcriptionResultsBucket?: string;
+  transcriptionHlsAllowedHosts: string[];
 
   // Slack
   slackBotToken: string;
@@ -82,6 +83,12 @@ export const config: Config = {
   },
   get transcriptionResultsBucket() {
     return getOptionalEnv("TRANSCRIPTION_RESULTS_BUCKET");
+  },
+  get transcriptionHlsAllowedHosts() {
+    return (getOptionalEnv("TRANSCRIPTION_HLS_ALLOWED_HOSTS") || "")
+      .split(/[,;]/)
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean);
   },
 
   get slackBotToken() { return getEnvOrThrow("SLACK_BOT_TOKEN"); },

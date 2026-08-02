@@ -2,7 +2,7 @@ import { handleDiscordInteraction } from "./handlers/discord-handler.ts";
 import { handleSlackEvents } from "./handlers/slack-handler.ts";
 import { handleSlackInteractions } from "./handlers/slack-interaction-handler.ts";
 import { config } from "./core/config.ts";
-import { textResponse, methodNotAllowed } from "./utils/http-utils.ts";
+import { methodNotAllowed, textResponse } from "./utils/http-utils.ts";
 import { installGracefulShutdown } from "./services/concurrency-limiter.ts";
 import { handleTranscriptionApi } from "./handlers/transcription-api-handler.ts";
 
@@ -25,8 +25,8 @@ Deno.serve({ port }, async (req) => {
     return textResponse("ElevenLabs Scribe Bot is running!");
   }
 
-  // Durable service-to-service transcription API. Authentication is enforced
-  // by Cloud Run IAM before the request reaches this handler.
+  // サービス間文字起こし API。認証は、このハンドラーへ到達する前に
+  // Cloud Run IAM が実施する。
   if (
     pathname === "/v1/transcription-jobs" ||
     pathname.startsWith("/v1/transcription-jobs/")
@@ -50,5 +50,5 @@ Deno.serve({ port }, async (req) => {
     return await handleSlackInteractions(req);
   }
 
-  return methodNotAllowed(['GET', 'POST']);
+  return methodNotAllowed(["GET", "POST"]);
 });

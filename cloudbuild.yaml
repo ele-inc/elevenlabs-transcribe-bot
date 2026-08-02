@@ -28,9 +28,10 @@ steps:
         done
         mapping="$${mapping%,}"
 
-        RESULTS_BUCKET="$${PROJECT_ID}-scribe-results"
+        RESULTS_BUCKET="$PROJECT_ID-scribe-results"
         JOB_NAME="scribe-transcription-worker"
-        RUNTIME_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8,GEMINI_MODEL=gemini-3.6-flash,GCP_REGION=asia-northeast1,TRANSCRIPTION_JOB_NAME=$${JOB_NAME},TRANSCRIPTION_RESULTS_BUCKET=$${RESULTS_BUCKET}"
+        HLS_ALLOWED_HOSTS="$_TRANSCRIPTION_HLS_ALLOWED_HOSTS"
+        RUNTIME_ENV="MAX_CONCURRENT_TRANSCRIPTIONS=8,GEMINI_MODEL=gemini-3.6-flash,GCP_REGION=asia-northeast1,TRANSCRIPTION_JOB_NAME=$${JOB_NAME},TRANSCRIPTION_RESULTS_BUCKET=$${RESULTS_BUCKET},TRANSCRIPTION_HLS_ALLOWED_HOSTS=$${HLS_ALLOWED_HOSTS}"
 
         gcloud run deploy scribe-bot \
           --project="$PROJECT_ID" \
@@ -73,3 +74,6 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 timeout: 3600s
+
+substitutions:
+  _TRANSCRIPTION_HLS_ALLOWED_HOSTS: ""

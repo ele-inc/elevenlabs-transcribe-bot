@@ -8,6 +8,7 @@ MAX_CONCURRENT_TRANSCRIPTIONS="8"
 GEMINI_MODEL="gemini-3.6-flash"
 JOB_NAME="scribe-transcription-worker"
 RESULTS_BUCKET="${PROJECT_ID}-scribe-results"
+HLS_ALLOWED_HOSTS="${TRANSCRIPTION_HLS_ALLOWED_HOSTS:-}"
 
 SECRETS=(
   ELEVENLABS_API_KEY
@@ -49,7 +50,7 @@ for name in "${SECRETS[@]}"; do
 done
 mapping="${mapping%,}"
 
-echo "🚀 Deploying $SERVICE from local source to Cloud Run..."
+echo "🚀 $SERVICE をローカルソースから Cloud Run へデプロイしています..."
 gcloud run deploy "$SERVICE" \
   --project="$PROJECT_ID" \
   --source=. \
@@ -65,7 +66,7 @@ gcloud run deploy "$SERVICE" \
   --min-instances=0 \
   --max-instances=1 \
   --port=8080 \
-  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS,GEMINI_MODEL=$GEMINI_MODEL,GCP_REGION=$REGION,TRANSCRIPTION_JOB_NAME=$JOB_NAME,TRANSCRIPTION_RESULTS_BUCKET=$RESULTS_BUCKET" \
+  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS,GEMINI_MODEL=$GEMINI_MODEL,GCP_REGION=$REGION,TRANSCRIPTION_JOB_NAME=$JOB_NAME,TRANSCRIPTION_RESULTS_BUCKET=$RESULTS_BUCKET,TRANSCRIPTION_HLS_ALLOWED_HOSTS=$HLS_ALLOWED_HOSTS" \
   --set-secrets="$mapping"
 
 SERVICE_IMAGE=$(gcloud run services describe "$SERVICE" \
@@ -73,7 +74,7 @@ SERVICE_IMAGE=$(gcloud run services describe "$SERVICE" \
   --region="$REGION" \
   --format='value(spec.template.spec.containers[0].image)')
 
-echo "🚀 Deploying durable transcription worker job..."
+echo "🚀 永続化文字起こしワーカージョブをデプロイしています..."
 gcloud run jobs deploy "$JOB_NAME" \
   --project="$PROJECT_ID" \
   --region="$REGION" \
@@ -85,7 +86,7 @@ gcloud run jobs deploy "$JOB_NAME" \
   --tasks=1 \
   --max-retries=1 \
   --task-timeout=7200s \
-  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS,GEMINI_MODEL=$GEMINI_MODEL,GCP_REGION=$REGION,TRANSCRIPTION_JOB_NAME=$JOB_NAME,TRANSCRIPTION_RESULTS_BUCKET=$RESULTS_BUCKET" \
+  --set-env-vars="MAX_CONCURRENT_TRANSCRIPTIONS=$MAX_CONCURRENT_TRANSCRIPTIONS,GEMINI_MODEL=$GEMINI_MODEL,GCP_REGION=$REGION,TRANSCRIPTION_JOB_NAME=$JOB_NAME,TRANSCRIPTION_RESULTS_BUCKET=$RESULTS_BUCKET,TRANSCRIPTION_HLS_ALLOWED_HOSTS=$HLS_ALLOWED_HOSTS" \
   --set-secrets="$mapping"
 
 echo "✅ Deployed"

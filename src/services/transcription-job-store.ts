@@ -7,6 +7,7 @@ import {
   type TranscriptionJobStore,
 } from "./transcription-job-contracts.ts";
 
+/** Firestore に文字起こしジョブの状態を永続化する。 */
 export class FirestoreTranscriptionJobStore implements TranscriptionJobStore {
   private readonly firestore: Firestore;
 
@@ -15,7 +16,7 @@ export class FirestoreTranscriptionJobStore implements TranscriptionJobStore {
     private readonly collectionName = config.transcriptionJobsCollection,
   ) {
     if (!projectId) {
-      throw new Error("GCP_PROJECT_ID is required for the transcription API");
+      throw new Error("文字起こし API には GCP_PROJECT_ID が必要です");
     }
     this.firestore = new Firestore({ projectId });
   }
@@ -81,14 +82,15 @@ export class FirestoreTranscriptionJobStore implements TranscriptionJobStore {
         workerExecution,
         error: undefined,
       };
-      transaction.set(ref, withoutUndefined(claimed));
+      transaction.update(ref, {
+        status: "processing",
+        attempts: claimed.attempts,
+        startedAt: now,
+        updatedAt: now,
+        workerExecution: workerExecution ?? FieldValue.delete(),
+        error: FieldValue.delete(),
+      });
       return claimed;
     });
   }
-}
-
-function withoutUndefined<T extends object>(value: T): T {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
 }

@@ -18,7 +18,7 @@ export interface TranscriptionJob {
   startedAt?: string;
   completedAt?: string;
   attempts: number;
-  executionName?: string;
+  dispatchOperationName?: string;
   workerExecution?: string;
   filename?: string;
   mimeType?: string;
